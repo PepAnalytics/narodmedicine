@@ -77,9 +77,10 @@ class EvidenceLevel(models.Model):
     code = models.CharField(max_length=10, unique=True)
     description = models.TextField()
     color = models.CharField(max_length=7, validators=[hex_color_validator])
+    rank = models.IntegerField(default=1)
 
     class Meta:
-        ordering = ("code",)
+        ordering = ("-rank", "code")
 
     def __str__(self) -> str:
         return self.code

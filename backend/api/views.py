@@ -45,6 +45,7 @@ DISEASE_SAMPLE = {
                     "code": "B",
                     "description": "Умеренный уровень доказательности.",
                     "color": "#F4B400",
+                    "rank": 7,
                 },
                 "rating": {"likes": 0, "dislikes": 0},
             },
@@ -57,6 +58,7 @@ DISEASE_SAMPLE = {
                     "code": "C",
                     "description": "Ограниченные доказательства эффективности.",
                     "color": "#DB4437",
+                    "rank": 5,
                 },
                 "rating": {"likes": 0, "dislikes": 0},
             },
@@ -76,6 +78,7 @@ DISEASE_SAMPLE = {
                     "code": "B",
                     "description": "Умеренный уровень доказательности.",
                     "color": "#F4B400",
+                    "rank": 7,
                 },
                 "rating": {"likes": 0, "dislikes": 0},
             }
@@ -99,6 +102,7 @@ REMEDY_SAMPLE = {
             "code": "B",
             "description": "Умеренный уровень доказательности.",
             "color": "#F4B400",
+            "rank": 7,
         },
         "ingredients": [
             {"id": 1, "name": "Мята", "amount": "1 столовая ложка"},
@@ -121,6 +125,7 @@ REMEDY_SAMPLE = {
             "code": "C",
             "description": "Ограниченные доказательства эффективности.",
             "color": "#DB4437",
+            "rank": 5,
         },
         "ingredients": [],
         "rating": {"likes": 0, "dislikes": 0},
@@ -138,6 +143,7 @@ REMEDY_SAMPLE = {
             "code": "B",
             "description": "Умеренный уровень доказательности.",
             "color": "#F4B400",
+            "rank": 7,
         },
         "ingredients": [
             {"id": 3, "name": "Ромашка", "amount": "1 чайная ложка"},
@@ -154,6 +160,7 @@ REMEDY_SEED = {
         "evidence_code": "B",
         "evidence_description": "Умеренный уровень доказательности.",
         "evidence_color": "#F4B400",
+        "evidence_rank": 7,
     },
     2: {
         "disease_name": "Мигрень",
@@ -161,6 +168,7 @@ REMEDY_SEED = {
         "evidence_code": "C",
         "evidence_description": "Ограниченные доказательства эффективности.",
         "evidence_color": "#DB4437",
+        "evidence_rank": 5,
     },
     3: {
         "disease_name": "Гастрит",
@@ -168,6 +176,7 @@ REMEDY_SEED = {
         "evidence_code": "B",
         "evidence_description": "Умеренный уровень доказательности.",
         "evidence_color": "#F4B400",
+        "evidence_rank": 7,
     },
 }
 
@@ -211,6 +220,7 @@ def resolve_remedy_for_rating(remedy_id: int) -> Remedy | None:
             defaults={
                 "description": seed_data["evidence_description"],
                 "color": seed_data["evidence_color"],
+                "rank": seed_data["evidence_rank"],
             },
         )
         remedy = Remedy.objects.create(

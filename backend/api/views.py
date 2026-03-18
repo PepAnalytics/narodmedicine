@@ -2,6 +2,8 @@ from copy import deepcopy
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -228,6 +230,11 @@ def resolve_remedy_for_rating(remedy_id: int) -> Remedy | None:
 
 
 class SearchView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Поиск болезней по симптомам",
+        request_body=SearchRequestSerializer,
+        responses={status.HTTP_200_OK: SearchResponseSerializer},
+    )
     def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
         serializer = SearchRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -238,6 +245,22 @@ class SearchView(APIView):
 
 
 class DiseaseDetailView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Детальная информация о болезни",
+        manual_parameters=[
+            openapi.Parameter(
+                "disease_id",
+                openapi.IN_PATH,
+                description="ID болезни",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            )
+        ],
+        responses={
+            status.HTTP_200_OK: DiseaseDetailSerializer,
+            status.HTTP_404_NOT_FOUND: "Disease not found in stub dataset.",
+        },
+    )
     def get(self, request, disease_id, *args, **kwargs):  # noqa: ANN002, ANN003
         payload = DISEASE_SAMPLE.get(disease_id)
         if not payload:
@@ -253,6 +276,22 @@ class DiseaseDetailView(APIView):
 
 
 class RemedyDetailView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Детальная информация о методе лечения",
+        manual_parameters=[
+            openapi.Parameter(
+                "remedy_id",
+                openapi.IN_PATH,
+                description="ID метода лечения",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            )
+        ],
+        responses={
+            status.HTTP_200_OK: RemedyDetailSerializer,
+            status.HTTP_404_NOT_FOUND: "Remedy not found in stub dataset.",
+        },
+    )
     def get(self, request, remedy_id, *args, **kwargs):  # noqa: ANN002, ANN003
         payload = REMEDY_SAMPLE.get(remedy_id)
         if not payload:
@@ -268,6 +307,24 @@ class RemedyDetailView(APIView):
 
 
 class RemedyRateView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Сохранение лайка/дизлайка по методу",
+        manual_parameters=[
+            openapi.Parameter(
+                "remedy_id",
+                openapi.IN_PATH,
+                description="ID метода лечения",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            )
+        ],
+        request_body=RemedyRateRequestSerializer,
+        responses={
+            status.HTTP_201_CREATED: RemedyRateResponseSerializer,
+            status.HTTP_200_OK: RemedyRateResponseSerializer,
+            status.HTTP_404_NOT_FOUND: "Remedy not found.",
+        },
+    )
     def post(self, request, remedy_id, *args, **kwargs):  # noqa: ANN002, ANN003
         serializer = RemedyRateRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

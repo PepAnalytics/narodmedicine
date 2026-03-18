@@ -22,6 +22,7 @@ class EvidenceLevelSerializer(serializers.Serializer):
     code = serializers.CharField()
     description = serializers.CharField()
     color = serializers.CharField()
+    rank = serializers.IntegerField()
 
 
 class RatingSummarySerializer(serializers.Serializer):

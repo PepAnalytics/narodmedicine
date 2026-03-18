@@ -43,8 +43,9 @@ class IngredientAdmin(admin.ModelAdmin):
 
 @admin.register(EvidenceLevel)
 class EvidenceLevelAdmin(admin.ModelAdmin):
-    list_display = ("id", "code", "color")
+    list_display = ("id", "code", "rank", "color")
     search_fields = ("code", "description")
+    list_filter = ("rank",)
 
 
 class RemedyIngredientInline(admin.TabularInline):

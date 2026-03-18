@@ -1,1 +1,1 @@
-
+"""Core migrations package."""

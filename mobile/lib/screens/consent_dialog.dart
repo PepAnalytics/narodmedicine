@@ -98,20 +98,16 @@ class _ConsentDialogState extends State<ConsentDialog> {
   }
 
   Future<void> _showTerms(BuildContext context) async {
-    final result = await Navigator.push<bool>(
+    await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const TermsOfServiceScreen(requireAcceptance: false),
-      ),
+      MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
     );
   }
 
   Future<void> _showPrivacy(BuildContext context) async {
-    final result = await Navigator.push<bool>(
+    await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const PrivacyPolicyScreen(requireAcceptance: false),
-      ),
+      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
     );
   }
 

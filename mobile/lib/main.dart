@@ -29,7 +29,7 @@ class NarodMedicineApp extends StatelessWidget {
     switch (settings.name) {
       case '/':
         return MaterialPageRoute(builder: (_) => const HomeScreen());
-      
+
       case '/search-results':
         final args = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
@@ -38,25 +38,29 @@ class NarodMedicineApp extends StatelessWidget {
             symptoms: args['symptoms'] as List<String>?,
           ),
         );
-      
+
       case '/disease':
         final disease = settings.arguments as Disease;
         return MaterialPageRoute(
           builder: (_) => DiseaseDetailScreen(disease: disease),
         );
-      
+
       case '/remedy':
         final remedyId = settings.arguments as int;
         return MaterialPageRoute(
           builder: (_) => RemedyDetailScreen(remedyId: remedyId),
         );
-      
+
+      case '/terms':
+        return MaterialPageRoute(builder: (_) => const TermsOfServiceScreen());
+
+      case '/privacy':
+        return MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen());
+
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
-            body: Center(
-              child: Text('Экран не найден: ${settings.name}'),
-            ),
+            body: Center(child: Text('Экран не найден: ${settings.name}')),
           ),
         );
     }

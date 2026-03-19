@@ -44,16 +44,19 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoadingPopular = true);
 
     try {
-      final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/api/diseases/popular/'),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .get(Uri.parse('http://10.0.2.2:8000/api/diseases/popular/'))
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);
-        final List<dynamic> diseasesJson = jsonData['diseases'] as List<dynamic>;
-        
+        final List<dynamic> diseasesJson =
+            jsonData['diseases'] as List<dynamic>;
+
         setState(() {
-          _popularDiseases = diseasesJson.map((json) => Disease.fromJson(json)).toList();
+          _popularDiseases = diseasesJson
+              .map((json) => Disease.fromJson(json))
+              .toList();
           _isLoadingPopular = false;
         });
       } else {
@@ -163,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: AppDesignTokens.spacingSM),
-              
+
               if (_isLoadingPopular)
                 const Center(
                   child: Padding(
@@ -216,7 +219,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _popularDiseases.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: AppDesignTokens.spacingMD),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(width: AppDesignTokens.spacingMD),
                     itemBuilder: (context, index) {
                       final disease = _popularDiseases[index];
                       return SizedBox(
@@ -240,7 +244,8 @@ class _HomeScreenState extends State<HomeScreen> {
               // Warning Block
               const AppWarningBlock(
                 title: 'Важное предупреждение',
-                message: 'Данное приложение не ставит диагноз и не заменяет консультацию врача. Все материалы носят ознакомительный характер.',
+                message:
+                    'Данное приложение не ставит диагноз и не заменяет консультацию врача. Все материалы носят ознакомительный характер.',
               ),
             ],
           ),

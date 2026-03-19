@@ -1,190 +1,133 @@
 import 'package:flutter/material.dart';
-import '../models/local/legal_document.dart';
-import '../services/services.dart';
-import '../utils/app_constants.dart';
+import '../theme/app_design_tokens.dart';
+import '../widgets/widgets.dart';
 
 /// Экран пользовательского соглашения
-class TermsOfServiceScreen extends StatefulWidget {
-  final LegalDocument? document;
-  final bool requireAcceptance;
-
-  const TermsOfServiceScreen({
-    super.key,
-    this.document,
-    this.requireAcceptance = false,
-  });
-
-  @override
-  State<TermsOfServiceScreen> createState() => _TermsOfServiceScreenState();
-}
-
-class _TermsOfServiceScreenState extends State<TermsOfServiceScreen> {
-  bool _isLoading = true;
-  LegalDocument? _document;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDocument();
-  }
-
-  Future<void> _loadDocument() async {
-    if (widget.document != null) {
-      setState(() {
-        _document = widget.document;
-        _isLoading = false;
-      });
-      return;
-    }
-
-    try {
-      // Загрузка из кэша или API
-      final db = DatabaseService();
-      await db.init();
-      final cached = db.getCachedTerms();
-
-      if (cached != null) {
-        setState(() {
-          _document = cached;
-          _isLoading = false;
-        });
-      } else {
-        final service = LegalService(
-          baseUrl: AppConstants.apiBaseUrl,
-          databaseService: db,
-        );
-        final doc = await service.getTermsOfService();
-        setState(() {
-          _document = doc;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
+class TermsOfServiceScreen extends StatelessWidget {
+  const TermsOfServiceScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Пользовательское соглашение')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_error != null && _document == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Пользовательское соглашение')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                const SizedBox(height: 16),
-                Text(
-                  'Ошибка загрузки документа',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: _loadDocument,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Повторить'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Пользовательское соглашение'),
-        actions: widget.requireAcceptance
-            ? null
-            : [
-                IconButton(
-                  icon: const Icon(Icons.share),
-                  onPressed: () {
-                    // TODO: Share functionality
-                  },
-                ),
-              ],
+      appBar: AppBar(title: const Text('Пользовательское соглашение')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Пользовательское соглашение',
+              style: TextStyle(
+                fontSize: AppDesignTokens.fontSizeH1,
+                fontWeight: AppDesignTokens.fontWeightBold,
+                color: AppDesignTokens.textPrimary,
+              ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingMD),
+            const Text(
+              'Версия 1.0.0 от 01.01.2026',
+              style: TextStyle(
+                fontSize: AppDesignTokens.fontSizeSmall,
+                color: AppDesignTokens.textMuted,
+              ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingLG),
+            _buildContent(),
+            const SizedBox(height: AppDesignTokens.spacingXL),
+            const AppWarningBlock(
+              title: 'Важно',
+              message:
+                  'Принимая условия данного соглашения, вы подтверждаете своё согласие с условиями использования приложения.',
+            ),
+          ],
+        ),
       ),
-      body: _document != null
-          ? Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Версия: ${_document!.version}',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            Text(
-                              'Действует с: ${_formatDate(_document!.effectiveFrom)}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      _document!.content,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ),
-                ),
-                if (widget.requireAcceptance)
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 48),
-                        ),
-                        child: const Text('Принимаю'),
-                      ),
-                    ),
-                  ),
-              ],
-            )
-          : const Center(child: Text('Документ не найден')),
     );
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  Widget _buildContent() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Section(
+          title: '1. Общие положения',
+          content: '''
+1.1. Настоящее Пользовательское соглашение (далее — Соглашение) регулирует отношения между пользователем и приложением «Народная Медицина».
+
+1.2. Используя приложение, вы подтверждаете, что ознакомлены с данным Соглашением и принимаете его условия.
+
+1.3. Приложение предоставляет информацию о народных методах лечения исключительно в ознакомительных целях.
+''',
+        ),
+        _Section(
+          title: '2. Цели приложения',
+          content: '''
+2.1. Приложение предназначено для предоставления информации о народных методах лечения.
+
+2.2. Приложение не является медицинским средством и не предназначено для диагностики или лечения заболеваний.
+
+2.3. Вся информация носит справочный характер и не может заменять консультацию квалифицированного врача.
+''',
+        ),
+        _Section(
+          title: '3. Ограничения ответственности',
+          content: '''
+3.1. Разработчики приложения не несут ответственности за любые последствия, связанные с использованием информации из приложения.
+
+3.2. Пользователь самостоятельно принимает решения о применении тех или иных методов лечения.
+
+3.3. Перед применением любых народных методов необходимо проконсультироваться с врачом.
+''',
+        ),
+        _Section(
+          title: '4. Конфиденциальность',
+          content: '''
+4.1. Приложение собирает минимально необходимые данные для своей работы.
+
+4.2. Персональные данные пользователя защищаются в соответствии с Политикой конфиденциальности.
+
+4.3. Пользователь соглашается на обработку своих данных в рамках функционала приложения.
+''',
+        ),
+      ],
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  final String title;
+  final String content;
+
+  const _Section({required this.title, required this.content});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: AppDesignTokens.fontSizeH3,
+                fontWeight: AppDesignTokens.fontWeightBold,
+                color: AppDesignTokens.textPrimary,
+              ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingSM),
+            Text(
+              content,
+              style: const TextStyle(
+                fontSize: AppDesignTokens.fontSizeBody,
+                color: AppDesignTokens.textSecondary,
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

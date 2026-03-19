@@ -31,6 +31,11 @@ class SymptomListSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
+class BasicDiseaseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class EvidenceLevelSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     code = serializers.CharField()
@@ -61,7 +66,7 @@ class RemedyIngredientSerializer(serializers.Serializer):
     amount = serializers.CharField()
 
 
-class RemedyDetailSerializer(serializers.Serializer):
+class RemedyFullSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     disease_id = serializers.IntegerField()
     name = serializers.CharField()
@@ -73,6 +78,10 @@ class RemedyDetailSerializer(serializers.Serializer):
     ingredients = RemedyIngredientSerializer(many=True)
     likes_count = serializers.IntegerField()
     dislikes_count = serializers.IntegerField()
+
+
+class RemedyListResponseSerializer(serializers.Serializer):
+    remedies = RemedyFullSerializer(many=True)
 
 
 class RemedyRateRequestSerializer(serializers.Serializer):
@@ -90,3 +99,51 @@ class RemedyRateResponseSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
     likes_count = serializers.IntegerField()
     dislikes_count = serializers.IntegerField()
+
+
+class FavoriteCreateSerializer(serializers.Serializer):
+    remedy_id = serializers.IntegerField()
+    user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
+
+
+class FavoriteDeleteResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+class FavoriteItemSerializer(serializers.Serializer):
+    favorited_at = serializers.DateTimeField()
+    remedy = RemedyFullSerializer()
+
+
+class FavoriteListResponseSerializer(serializers.Serializer):
+    favorites = FavoriteItemSerializer(many=True)
+
+
+class HistoryCreateSerializer(serializers.Serializer):
+    remedy_id = serializers.IntegerField()
+    user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
+
+
+class HistoryCreateResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_id = serializers.CharField()
+    remedy_id = serializers.IntegerField()
+    viewed_at = serializers.DateTimeField()
+
+
+class HistoryItemSerializer(serializers.Serializer):
+    viewed_at = serializers.DateTimeField()
+    remedy = RemedyFullSerializer()
+
+
+class HistoryListResponseSerializer(serializers.Serializer):
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    total = serializers.IntegerField()
+    results = HistoryItemSerializer(many=True)
+
+
+class SyncResponseSerializer(serializers.Serializer):
+    symptoms = SymptomListSerializer(many=True)
+    diseases = BasicDiseaseSerializer(many=True)
+    evidence_levels = EvidenceLevelSerializer(many=True)

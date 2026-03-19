@@ -4,11 +4,13 @@ from core.models import (
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
+    Favorite,
     Ingredient,
     Remedy,
     RemedyIngredient,
     Symptom,
     UserRating,
+    ViewHistory,
 )
 
 
@@ -82,3 +84,19 @@ class UserRatingAdmin(admin.ModelAdmin):
     search_fields = ("user_id", "comment", "remedy__name")
     list_filter = ("is_like", "created_at")
     readonly_fields = ("created_at",)
+
+
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    list_display = ("id", "user_id", "remedy", "created_at")
+    search_fields = ("user_id", "remedy__name")
+    list_filter = ("created_at",)
+    readonly_fields = ("created_at",)
+
+
+@admin.register(ViewHistory)
+class ViewHistoryAdmin(admin.ModelAdmin):
+    list_display = ("id", "user_id", "remedy", "viewed_at")
+    search_fields = ("user_id", "remedy__name")
+    list_filter = ("viewed_at",)
+    readonly_fields = ("viewed_at",)

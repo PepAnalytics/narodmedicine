@@ -1,4 +1,4 @@
-# Folk Medicine Backend (Sprint 0)
+# Folk Medicine Backend (Sprint 2)
 
 Бэкенд MVP для мобильного справочника по народной медицине.
 
@@ -100,18 +100,29 @@ black --config backend/pyproject.toml backend
 flake8 --config backend/.flake8 backend
 ```
 
-## API (Sprint 1)
+## API (Sprint 2)
 
-- `GET /api/symptoms/`
+- `GET /api/symptoms/` (поддерживает нечёткий поиск: `?q=...`)
 - `POST /api/search/`
 - `GET /api/diseases/{id}/`
+- `GET /api/remedies/`
 - `GET /api/remedies/{id}/`
 - `POST /api/remedies/{id}/rate/`
+- `POST /api/favorites/`
+- `GET /api/favorites/`
+- `DELETE /api/favorites/{remedy_id}/`
+- `POST /api/history/`
+- `GET /api/history/`
+- `GET /api/sync/`
 
 Примеры:
 
 ```bash
 curl http://localhost:8000/api/symptoms/
+```
+
+```bash
+curl "http://localhost:8000/api/symptoms/?q=голов"
 ```
 
 ```bash
@@ -121,7 +132,11 @@ curl -X POST http://localhost:8000/api/search/ \
 ```
 
 ```bash
-curl http://localhost:8000/api/diseases/1/
+curl "http://localhost:8000/api/diseases/1/?evidence_level=A,B"
+```
+
+```bash
+curl "http://localhost:8000/api/remedies/?evidence_level=A&disease_id=1"
 ```
 
 ```bash
@@ -132,6 +147,37 @@ curl http://localhost:8000/api/remedies/1/
 curl -X POST http://localhost:8000/api/remedies/1/rate/ \
   -H "Content-Type: application/json" \
   -d '{"user_id":"some-uuid","is_like":true,"comment":"Помогло"}'
+```
+
+```bash
+curl -X POST http://localhost:8000/api/favorites/ \
+  -H "X-User-Id: some-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{"remedy_id": 1}'
+```
+
+```bash
+curl http://localhost:8000/api/favorites/ -H "X-User-Id: some-uuid"
+```
+
+```bash
+curl -X DELETE http://localhost:8000/api/favorites/1/ -H "X-User-Id: some-uuid"
+```
+
+```bash
+curl -X POST http://localhost:8000/api/history/ \
+  -H "X-User-Id: some-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{"remedy_id": 1}'
+```
+
+```bash
+curl "http://localhost:8000/api/history/?page=1&page_size=20" \
+  -H "X-User-Id: some-uuid"
+```
+
+```bash
+curl -i http://localhost:8000/api/sync/
 ```
 
 ## Инициализационный датасет

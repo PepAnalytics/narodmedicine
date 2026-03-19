@@ -165,3 +165,46 @@ class UserRating(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id}: {'like' if self.is_like else 'dislike'}"
+
+
+class Favorite(models.Model):
+    user_id = models.CharField(max_length=128)
+    remedy = models.ForeignKey(
+        Remedy,
+        on_delete=models.CASCADE,
+        related_name="favorites",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user_id", "remedy"),
+                name="unique_user_favorite_remedy",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} -> {self.remedy_id}"
+
+
+class ViewHistory(models.Model):
+    user_id = models.CharField(max_length=128)
+    remedy = models.ForeignKey(
+        Remedy,
+        on_delete=models.CASCADE,
+        related_name="history_items",
+    )
+    viewed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-viewed_at",)
+        indexes = [
+            models.Index(
+                fields=("user_id", "-viewed_at"), name="history_user_viewed_idx"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}: {self.remedy_id} at {self.viewed_at.isoformat()}"

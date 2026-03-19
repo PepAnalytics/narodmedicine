@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/local/local.dart';
-import '../services/services.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../theme/app_design_tokens.dart';
+import '../widgets/widgets.dart';
+import '../models/models.dart';
 
 /// Экран истории просмотров
 class HistoryScreen extends StatefulWidget {
@@ -11,19 +14,61 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  late HistoryService _historyService;
-  late DatabaseService _databaseService;
+  List<Map<String, dynamic>> _history = [];
+  bool _isLoading = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _initServices();
+    _loadHistory();
   }
 
-  Future<void> _initServices() async {
-    _databaseService = DatabaseService();
-    _historyService = HistoryService(databaseService: _databaseService);
-    setState(() {});
+  Future<void> _loadHistory() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // TODO: Интеграция с API GET /api/history/
+      // Пока используем моковые данные
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      setState(() {
+        _history = [];
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _clearHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Очистить историю?'),
+        content: const Text('Это действие нельзя отменить'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Очистить',
+              style: TextStyle(color: AppDesignTokens.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _history = []);
+    }
   }
 
   @override
@@ -31,115 +76,126 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('История'),
-        centerTitle: true,
         actions: [
-          if (_historyService.getHistory().isNotEmpty)
+          if (_history.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              onPressed: () => _showClearDialog(),
+              onPressed: _clearHistory,
               tooltip: 'Очистить историю',
             ),
         ],
       ),
-      body: StreamBuilder(
-        stream: _historyService.changes,
-        builder: (context, snapshot) {
-          final history = _historyService.getHistory();
-
-          if (history.isEmpty) {
-            return Center(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: AppDesignTokens.danger,
+                      size: 64,
+                    ),
+                    const SizedBox(height: AppDesignTokens.spacingMD),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: AppDesignTokens.textSecondary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppDesignTokens.spacingLG),
+                    AppButton(
+                      text: 'Повторить',
+                      onPressed: _loadHistory,
+                      type: AppButtonType.outline,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _history.isEmpty
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.history,
                     size: 80,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: AppDesignTokens.textMuted,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
+                  const SizedBox(height: AppDesignTokens.spacingMD),
+                  const Text(
                     'История пуста',
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: TextStyle(
+                      fontSize: AppDesignTokens.fontSizeH3,
+                      fontWeight: AppDesignTokens.fontWeightBold,
+                      color: AppDesignTokens.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: AppDesignTokens.spacingSM),
+                  const Text(
                     'Просмотренные методы\nпоявятся здесь',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(color: AppDesignTokens.textSecondary),
                   ),
                 ],
               ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: history.length,
-            itemBuilder: (context, index) {
-              final item = history[index];
-              return _buildHistoryItem(item);
-            },
-          );
-        },
-      ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
+              itemCount: _history.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppDesignTokens.spacingSM),
+              itemBuilder: (context, index) {
+                final item = _history[index];
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.history,
+                      color: AppDesignTokens.primaryGreen,
+                    ),
+                    title: Text(
+                      item['name'] ?? '',
+                      style: const TextStyle(
+                        fontSize: AppDesignTokens.fontSizeBody,
+                        fontWeight: AppDesignTokens.fontWeightMedium,
+                        color: AppDesignTokens.textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      item['disease_name'] ?? '',
+                      style: const TextStyle(
+                        fontSize: AppDesignTokens.fontSizeSmall,
+                        color: AppDesignTokens.textSecondary,
+                      ),
+                    ),
+                    trailing: Text(
+                      _formatTime(item['viewed_at']),
+                      style: const TextStyle(
+                        fontSize: AppDesignTokens.fontSizeCaption,
+                        color: AppDesignTokens.textMuted,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        '/remedy',
+                        arguments: item['remedy_id'],
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
     );
   }
 
-  Widget _buildHistoryItem(LocalHistoryItem item) {
-    return ListTile(
-      leading: const Icon(Icons.history),
-      title: Text(item.name),
-      subtitle: Text(item.diseaseName),
-      trailing: Text(
-        _formatTime(item.viewedAt),
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      onTap: () {
-        // Переход к деталям метода
-        // Navigator.pushNamed(context, AppConstants.remedyDetailRoute, arguments: item.remedyId);
-      },
-    );
-  }
-
-  String _formatTime(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inMinutes < 1) {
-      return 'Только что';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes} мин. назад';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours} ч. назад';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} дн. назад';
-    } else {
-      return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}';
-    }
-  }
-
-  void _showClearDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Очистить историю?'),
-        content: const Text('Это действие нельзя отменить'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () {
-              _historyService.clearHistory();
-              Navigator.pop(context);
-            },
-            child: const Text('Очистить', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  String _formatTime(dynamic viewedAt) {
+    // TODO: Форматирование времени
+    return 'Недавно';
   }
 }

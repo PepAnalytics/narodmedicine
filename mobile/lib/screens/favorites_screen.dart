@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/local/local.dart';
-import '../services/services.dart';
-import '../utils/app_constants.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../theme/app_design_tokens.dart';
+import '../widgets/widgets.dart';
+import '../models/models.dart';
 
 /// Экран избранных методов
 class FavoritesScreen extends StatefulWidget {
@@ -12,139 +14,119 @@ class FavoritesScreen extends StatefulWidget {
 }
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
-  late FavoritesService _favoritesService;
-  late DatabaseService _databaseService;
+  List<RemedyBrief> _favorites = [];
+  bool _isLoading = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _initServices();
+    _loadFavorites();
   }
 
-  Future<void> _initServices() async {
-    _databaseService = DatabaseService();
-    // Инициализация будет выполнена в main.dart
-    _favoritesService = FavoritesService(
-      baseUrl: AppConstants.apiBaseUrl,
-      databaseService: _databaseService,
-    );
-    setState(() {});
+  Future<void> _loadFavorites() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // TODO: Интеграция с API GET /api/favorites/
+      // Пока используем моковые данные
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      setState(() {
+        _favorites = [];
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Избранное'), centerTitle: true),
-      body: StreamBuilder(
-        stream: _favoritesService.changes,
-        builder: (context, snapshot) {
-          final favorites = _favoritesService.getFavorites();
-
-          if (favorites.isEmpty) {
-            return Center(
+      appBar: AppBar(title: const Text('Избранное')),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: AppDesignTokens.danger,
+                      size: 64,
+                    ),
+                    const SizedBox(height: AppDesignTokens.spacingMD),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: AppDesignTokens.textSecondary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppDesignTokens.spacingLG),
+                    AppButton(
+                      text: 'Повторить',
+                      onPressed: _loadFavorites,
+                      type: AppButtonType.outline,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _favorites.isEmpty
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.favorite_border,
                     size: 80,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: AppDesignTokens.textMuted,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
+                  const SizedBox(height: AppDesignTokens.spacingMD),
+                  const Text(
                     'Нет избранных методов',
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: TextStyle(
+                      fontSize: AppDesignTokens.fontSizeH3,
+                      fontWeight: AppDesignTokens.fontWeightBold,
+                      color: AppDesignTokens.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: AppDesignTokens.spacingSM),
+                  const Text(
                     'Добавляйте методы в избранное,\nчтобы они появились здесь',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(color: AppDesignTokens.textSecondary),
                   ),
                 ],
               ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: favorites.length,
-            itemBuilder: (context, index) {
-              final favorite = favorites[index];
-              return _buildFavoriteCard(favorite);
-            },
-          );
-        },
-      ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
+              itemCount: _favorites.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppDesignTokens.spacingMD),
+              itemBuilder: (context, index) {
+                final remedy = _favorites[index];
+                return AppRemedyCard(
+                  remedy: remedy,
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/remedy',
+                      arguments: remedy.id,
+                    );
+                  },
+                );
+              },
+            ),
     );
-  }
-
-  Widget _buildFavoriteCard(LocalFavorite favorite) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: InkWell(
-        onTap: () {
-          // Переход к деталям метода
-          // Navigator.pushNamed(context, AppConstants.remedyDetailRoute, arguments: favorite.remedyId);
-        },
-        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      favorite.name,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.favorite, color: Colors.red),
-                    onPressed: () {
-                      _favoritesService.removeFavorite(favorite.remedyId);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                favorite.diseaseName,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Добавлено: ${_formatDate(favorite.addedAt)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
   }
 }

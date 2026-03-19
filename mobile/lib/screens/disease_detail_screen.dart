@@ -49,16 +49,19 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
           ? 'http://10.0.2.2:8000/api/diseases/${widget.disease.id}/'
           : 'http://10.0.2.2:8000/api/diseases/${widget.disease.id}/?region=$_selectedRegion';
 
-      final response = await http.get(
-        Uri.parse(url),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);
-        final List<dynamic> remediesJson = jsonData['remedies'] as List<dynamic>;
+        final List<dynamic> remediesJson =
+            jsonData['remedies'] as List<dynamic>;
 
         setState(() {
-          _remedies = remediesJson.map((json) => RemedyBrief.fromJson(json)).toList();
+          _remedies = remediesJson
+              .map((json) => RemedyBrief.fromJson(json))
+              .toList();
           _isLoading = false;
         });
       } else {
@@ -143,7 +146,8 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _regions.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: AppDesignTokens.spacingSM),
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: AppDesignTokens.spacingSM),
                       itemBuilder: (context, index) {
                         final region = _regions[index];
                         final isSelected = _selectedRegion == region.key;
@@ -153,7 +157,9 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
                           isSelected: isSelected,
                           onTap: () {
                             setState(() {
-                              _selectedRegion = region.key == 'all' ? null : region.key;
+                              _selectedRegion = region.key == 'all'
+                                  ? null
+                                  : region.key;
                             });
                             _loadRemedies();
                           },
@@ -184,70 +190,67 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 )
               : _error != null
-                  ? SliverFillRemaining(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.error_outline,
-                                color: AppDesignTokens.danger,
-                                size: 64,
-                              ),
-                              const SizedBox(height: AppDesignTokens.spacingMD),
-                              Text(
-                                _error!,
-                                style: const TextStyle(
-                                  color: AppDesignTokens.textSecondary,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: AppDesignTokens.spacingLG),
-                              AppButton(
-                                text: 'Повторить',
-                                onPressed: _loadRemedies,
-                                type: AppButtonType.outline,
-                              ),
-                            ],
+              ? SliverFillRemaining(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: AppDesignTokens.danger,
+                            size: 64,
                           ),
-                        ),
-                      ),
-                    )
-                  : _remedies.isEmpty
-                      ? const SliverFillRemaining(
-                          child: Center(
-                            child: Text(
-                              'Методы не найдены',
-                              style: TextStyle(color: AppDesignTokens.textMuted),
+                          const SizedBox(height: AppDesignTokens.spacingMD),
+                          Text(
+                            _error!,
+                            style: const TextStyle(
+                              color: AppDesignTokens.textSecondary,
                             ),
+                            textAlign: TextAlign.center,
                           ),
-                        )
-                      : SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final remedy = _remedies[index];
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppDesignTokens.spacingMD,
-                                  vertical: AppDesignTokens.spacingXS,
-                                ),
-                                child: AppRemedyCard(
-                                  remedy: remedy,
-                                  onTap: () {
-                                    Navigator.pushNamed(
-                                      context,
-                                      '/remedy',
-                                      arguments: remedy.id,
-                                    );
-                                  },
-                                ),
-                              );
-                            },
-                            childCount: _remedies.length,
+                          const SizedBox(height: AppDesignTokens.spacingLG),
+                          AppButton(
+                            text: 'Повторить',
+                            onPressed: _loadRemedies,
+                            type: AppButtonType.outline,
                           ),
-                        ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : _remedies.isEmpty
+              ? const SliverFillRemaining(
+                  child: Center(
+                    child: Text(
+                      'Методы не найдены',
+                      style: TextStyle(color: AppDesignTokens.textMuted),
+                    ),
+                  ),
+                )
+              : SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final remedy = _remedies[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppDesignTokens.spacingMD,
+                        vertical: AppDesignTokens.spacingXS,
+                      ),
+                      child: AppRemedyCard(
+                        remedy: remedy,
+                        onTap: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/remedy',
+                            arguments: remedy.id,
+                          );
+                        },
+                      ),
+                    );
+                  }, childCount: _remedies.length),
+                ),
 
           // Отступ снизу
           const SliverToBoxAdapter(

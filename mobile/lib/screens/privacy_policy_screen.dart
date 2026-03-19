@@ -1,182 +1,146 @@
 import 'package:flutter/material.dart';
-import '../models/local/legal_document.dart';
-import '../services/services.dart';
-import '../utils/app_constants.dart';
+import '../theme/app_design_tokens.dart';
+import '../widgets/widgets.dart';
 
 /// Экран политики конфиденциальности
-class PrivacyPolicyScreen extends StatefulWidget {
-  final LegalDocument? document;
-  final bool requireAcceptance;
-
-  const PrivacyPolicyScreen({
-    super.key,
-    this.document,
-    this.requireAcceptance = false,
-  });
-
-  @override
-  State<PrivacyPolicyScreen> createState() => _PrivacyPolicyScreenState();
-}
-
-class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
-  bool _isLoading = true;
-  LegalDocument? _document;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDocument();
-  }
-
-  Future<void> _loadDocument() async {
-    if (widget.document != null) {
-      setState(() {
-        _document = widget.document;
-        _isLoading = false;
-      });
-      return;
-    }
-
-    try {
-      final db = DatabaseService();
-      await db.init();
-      final cached = db.getCachedPrivacy();
-
-      if (cached != null) {
-        setState(() {
-          _document = cached;
-          _isLoading = false;
-        });
-      } else {
-        final service = LegalService(
-          baseUrl: AppConstants.apiBaseUrl,
-          databaseService: db,
-        );
-        final doc = await service.getPrivacyPolicy();
-        setState(() {
-          _document = doc;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
+class PrivacyPolicyScreen extends StatelessWidget {
+  const PrivacyPolicyScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Политика конфиденциальности')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_error != null && _document == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Политика конфиденциальности')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                const SizedBox(height: 16),
-                Text(
-                  'Ошибка загрузки документа',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: _loadDocument,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Повторить'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Политика конфиденциальности'),
-        actions: widget.requireAcceptance
-            ? null
-            : [IconButton(icon: const Icon(Icons.share), onPressed: () {})],
+      appBar: AppBar(title: const Text('Политика конфиденциальности')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Политика конфиденциальности',
+              style: TextStyle(
+                fontSize: AppDesignTokens.fontSizeH1,
+                fontWeight: AppDesignTokens.fontWeightBold,
+                color: AppDesignTokens.textPrimary,
+              ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingMD),
+            const Text(
+              'Версия 1.0.0 от 01.01.2026',
+              style: TextStyle(
+                fontSize: AppDesignTokens.fontSizeSmall,
+                color: AppDesignTokens.textMuted,
+              ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingLG),
+            _buildContent(),
+          ],
+        ),
       ),
-      body: _document != null
-          ? Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Версия: ${_document!.version}',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            Text(
-                              'Действует с: ${_formatDate(_document!.effectiveFrom)}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      _document!.content,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ),
-                ),
-                if (widget.requireAcceptance)
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 48),
-                        ),
-                        child: const Text('Принимаю'),
-                      ),
-                    ),
-                  ),
-              ],
-            )
-          : const Center(child: Text('Документ не найден')),
     );
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  Widget _buildContent() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Section(
+          title: '1. Сбор данных',
+          content: '''
+1.1. Приложение собирает минимально необходимые данные для своей работы.
+
+1.2. Собираемые данные включают:
+• Уникальный идентификатор пользователя
+• История просмотров методов лечения
+• Избранные методы
+• Данные об оценках (лайки/дизлайки)
+
+1.3. Приложение не собирает персональные данные без явного согласия пользователя.
+''',
+        ),
+        _Section(
+          title: '2. Использование данных',
+          content: '''
+2.1. Собранные данные используются исключительно для улучшения функционала приложения.
+
+2.2. Данные могут использоваться для:
+• Персонализации контента
+• Улучшения рекомендаций
+• Анализа использования приложения
+
+2.3. Данные не передаются третьим лицам без согласия пользователя.
+''',
+        ),
+        _Section(
+          title: '3. Хранение данных',
+          content: '''
+3.1. Данные хранятся локально на устройстве пользователя.
+
+3.2. При наличии интернет-соединения данные могут синхронизироваться с сервером.
+
+3.3. Пользователь может удалить свои данные в любой момент через настройки приложения.
+''',
+        ),
+        _Section(
+          title: '4. Безопасность',
+          content: '''
+4.1. Мы принимаем все необходимые меры для защиты данных пользователя.
+
+4.2. Данные передаются по защищённым каналам связи (HTTPS).
+
+4.3. Доступ к данным имеют только уполномоченные лица.
+''',
+        ),
+        _Section(
+          title: '5. Права пользователя',
+          content: '''
+5.1. Пользователь имеет право:
+• Получить копию своих данных
+• Исправить неточные данные
+• Удалить свои данные
+• Отозвать согласие на обработку данных
+
+5.2. Для реализации своих прав пользователь может связаться с поддержкой.
+''',
+        ),
+      ],
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  final String title;
+  final String content;
+
+  const _Section({required this.title, required this.content});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: AppDesignTokens.fontSizeH3,
+                fontWeight: AppDesignTokens.fontWeightBold,
+                color: AppDesignTokens.textPrimary,
+              ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingSM),
+            Text(
+              content,
+              style: const TextStyle(
+                fontSize: AppDesignTokens.fontSizeBody,
+                color: AppDesignTokens.textSecondary,
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -10,11 +10,7 @@ class SearchResultsScreen extends StatefulWidget {
   final String query;
   final List<String>? symptoms;
 
-  const SearchResultsScreen({
-    super.key,
-    required this.query,
-    this.symptoms,
-  });
+  const SearchResultsScreen({super.key, required this.query, this.symptoms});
 
   @override
   State<SearchResultsScreen> createState() => _SearchResultsScreenState();
@@ -42,18 +38,23 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           ? widget.symptoms
           : widget.query.split(',').map((s) => s.trim()).toList();
 
-      final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/api/search/'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'symptoms': symptoms}),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse('http://10.0.2.2:8000/api/search/'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'symptoms': symptoms}),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);
-        final List<dynamic> diseasesJson = jsonData['diseases'] as List<dynamic>;
+        final List<dynamic> diseasesJson =
+            jsonData['diseases'] as List<dynamic>;
 
         setState(() {
-          _results = diseasesJson.map((json) => Disease.fromJson(json)).toList();
+          _results = diseasesJson
+              .map((json) => Disease.fromJson(json))
+              .toList();
           _isLoading = false;
         });
       } else {
@@ -83,84 +84,83 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: AppDesignTokens.danger,
-                          size: 64,
-                        ),
-                        const SizedBox(height: AppDesignTokens.spacingMD),
-                        Text(
-                          _error!,
-                          style: const TextStyle(
-                            color: AppDesignTokens.textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: AppDesignTokens.spacingLG),
-                        AppButton(
-                          text: 'Повторить',
-                          onPressed: _search,
-                          type: AppButtonType.outline,
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: AppDesignTokens.danger,
+                      size: 64,
+                    ),
+                    const SizedBox(height: AppDesignTokens.spacingMD),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: AppDesignTokens.textSecondary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppDesignTokens.spacingLG),
+                    AppButton(
+                      text: 'Повторить',
+                      onPressed: _search,
+                      type: AppButtonType.outline,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _results.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.search_off,
+                    size: 64,
+                    color: AppDesignTokens.textMuted,
+                  ),
+                  const SizedBox(height: AppDesignTokens.spacingMD),
+                  const Text(
+                    'Ничего не найдено',
+                    style: TextStyle(
+                      fontSize: AppDesignTokens.fontSizeH3,
+                      fontWeight: AppDesignTokens.fontWeightBold,
+                      color: AppDesignTokens.textPrimary,
                     ),
                   ),
-                )
-              : _results.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.search_off,
-                            size: 64,
-                            color: AppDesignTokens.textMuted,
-                          ),
-                          const SizedBox(height: AppDesignTokens.spacingMD),
-                          const Text(
-                            'Ничего не найдено',
-                            style: TextStyle(
-                              fontSize: AppDesignTokens.fontSizeH3,
-                              fontWeight: AppDesignTokens.fontWeightBold,
-                              color: AppDesignTokens.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: AppDesignTokens.spacingSM),
-                          const Text(
-                            'Попробуйте изменить запрос',
-                            style: TextStyle(
-                              color: AppDesignTokens.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
-                      itemCount: _results.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: AppDesignTokens.spacingMD),
-                      itemBuilder: (context, index) {
-                        final disease = _results[index];
-                        final score = disease.matchScore ?? 0.0;
-                        return AppDiseaseCard(
-                          disease: disease,
-                          score: score,
-                          onTap: () {
-                            Navigator.pushNamed(
-                              context,
-                              '/disease',
-                              arguments: disease,
-                            );
-                          },
-                        );
-                      },
-                    ),
+                  const SizedBox(height: AppDesignTokens.spacingSM),
+                  const Text(
+                    'Попробуйте изменить запрос',
+                    style: TextStyle(color: AppDesignTokens.textSecondary),
+                  ),
+                ],
+              ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
+              itemCount: _results.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppDesignTokens.spacingMD),
+              itemBuilder: (context, index) {
+                final disease = _results[index];
+                final score = disease.matchScore ?? 0.0;
+                return AppDiseaseCard(
+                  disease: disease,
+                  score: score,
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/disease',
+                      arguments: disease,
+                    );
+                  },
+                );
+              },
+            ),
     );
   }
 }

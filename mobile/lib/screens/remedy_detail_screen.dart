@@ -34,13 +34,15 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
     });
 
     try {
-      final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/api/remedies/${widget.remedyId}/'),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .get(
+            Uri.parse('http://10.0.2.2:8000/api/remedies/${widget.remedyId}/'),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);
-        
+
         setState(() {
           _remedy = Remedy.fromJson(jsonData);
           _isLoading = false;
@@ -62,7 +64,8 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
   Future<void> _shareRemedy() async {
     if (_remedy == null) return;
 
-    final shareText = '''
+    final shareText =
+        '''
 ${_remedy!.name}
 
 ${_remedy!.description}
@@ -210,7 +213,9 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: remedy.ingredients.map((ingredient) {
                     return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: AppDesignTokens.spacingXS),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppDesignTokens.spacingXS,
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -229,35 +234,50 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
                                   style: const TextStyle(
                                     fontSize: AppDesignTokens.fontSizeBody,
                                     color: AppDesignTokens.textPrimary,
-                                    fontWeight: AppDesignTokens.fontWeightMedium,
+                                    fontWeight:
+                                        AppDesignTokens.fontWeightMedium,
                                   ),
                                 ),
                                 // Альтернативные названия
                                 if (ingredient.alternativeNames != null &&
-                                    ingredient.alternativeNames!.isNotEmpty) ...[
-                                  const SizedBox(height: AppDesignTokens.spacingXS),
+                                    ingredient
+                                        .alternativeNames!
+                                        .isNotEmpty) ...[
+                                  const SizedBox(
+                                    height: AppDesignTokens.spacingXS,
+                                  ),
                                   Wrap(
                                     spacing: AppDesignTokens.spacingXS,
                                     runSpacing: AppDesignTokens.spacingXS,
-                                    children: ingredient.alternativeNames!.entries.map((entry) {
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: AppDesignTokens.spacingSM,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppDesignTokens.bgMuted,
-                                          borderRadius: BorderRadius.circular(AppDesignTokens.radiusSM),
-                                        ),
-                                        child: Text(
-                                          '${entry.key}: ${entry.value}',
-                                          style: const TextStyle(
-                                            fontSize: AppDesignTokens.fontSizeCaption,
-                                            color: AppDesignTokens.textMuted,
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
+                                    children: ingredient
+                                        .alternativeNames!
+                                        .entries
+                                        .map((entry) {
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal:
+                                                  AppDesignTokens.spacingSM,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppDesignTokens.bgMuted,
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                    AppDesignTokens.radiusSM,
+                                                  ),
+                                            ),
+                                            child: Text(
+                                              '${entry.key}: ${entry.value}',
+                                              style: const TextStyle(
+                                                fontSize: AppDesignTokens
+                                                    .fontSizeCaption,
+                                                color:
+                                                    AppDesignTokens.textMuted,
+                                              ),
+                                            ),
+                                          );
+                                        })
+                                        .toList(),
                                   ),
                                 ],
                               ],
@@ -271,7 +291,9 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
                               ),
                               decoration: BoxDecoration(
                                 color: AppDesignTokens.lightGreen,
-                                borderRadius: BorderRadius.circular(AppDesignTokens.radiusSM),
+                                borderRadius: BorderRadius.circular(
+                                  AppDesignTokens.radiusSM,
+                                ),
                               ),
                               child: Text(
                                 ingredient.amount!,
@@ -337,7 +359,8 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
             // Warning Block - дисклеймер
             const AppWarningBlock(
               title: 'Важное предупреждение',
-              message: 'Данное приложение не ставит диагноз и не заменяет консультацию врача. Все материалы носят ознакомительный характер.',
+              message:
+                  'Данное приложение не ставит диагноз и не заменяет консультацию врача. Все материалы носят ознакомительный характер.',
             ),
             const SizedBox(height: AppDesignTokens.spacingXL),
           ],
@@ -370,7 +393,8 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
                 ),
               ],
             ),
-            if (remedy.culturalContext != null && remedy.culturalContext!.isNotEmpty) ...[
+            if (remedy.culturalContext != null &&
+                remedy.culturalContext!.isNotEmpty) ...[
               const SizedBox(height: AppDesignTokens.spacingSM),
               Text(
                 remedy.culturalContext!,

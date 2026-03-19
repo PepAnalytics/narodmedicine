@@ -48,6 +48,18 @@ docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
 ```
 
+5. Загрузите стартовые данные Sprint 1:
+
+```bash
+docker compose exec backend python manage.py load_initial_data
+```
+
+Для полной перезагрузки данных:
+
+```bash
+docker compose exec backend python manage.py load_initial_data --reset
+```
+
 ## URL
 
 - Django Admin: `http://localhost:8000/admin/`
@@ -88,14 +100,19 @@ black --config backend/pyproject.toml backend
 flake8 --config backend/.flake8 backend
 ```
 
-## API (Sprint 0, заглушки)
+## API (Sprint 1)
 
+- `GET /api/symptoms/`
 - `POST /api/search/`
 - `GET /api/diseases/{id}/`
 - `GET /api/remedies/{id}/`
 - `POST /api/remedies/{id}/rate/`
 
 Примеры:
+
+```bash
+curl http://localhost:8000/api/symptoms/
+```
 
 ```bash
 curl -X POST http://localhost:8000/api/search/ \
@@ -116,3 +133,13 @@ curl -X POST http://localhost:8000/api/remedies/1/rate/ \
   -H "Content-Type: application/json" \
   -d '{"user_id":"some-uuid","is_like":true,"comment":"Помогло"}'
 ```
+
+## Инициализационный датасет
+
+Команда `load_initial_data` создаёт:
+
+- 50 болезней
+- 100 симптомов
+- 100 ингредиентов
+- 200 методов лечения (по 4 на каждую болезнь)
+- связи болезнь-симптом с весами `weight`

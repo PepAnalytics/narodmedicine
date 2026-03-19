@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 import '../models/models.dart';
 import '../utils/app_constants.dart';
 
@@ -21,11 +22,12 @@ class ApiService {
   final Future<String> Function() _getUserId;
 
   ApiService({
-    required this.baseUrl,
+    String? baseUrl,
     http.Client? client,
     required Future<String> Function() getUserId,
-  }) : _client = client ?? http.Client(),
-       _getUserId = getUserId;
+  })  : baseUrl = baseUrl ?? AppConfig.apiUrl,
+        _client = client ?? http.Client(),
+        _getUserId = getUserId;
 
   /// Получить список всех симптомов для автодополнения
   Future<List<Symptom>> getSymptoms() async {

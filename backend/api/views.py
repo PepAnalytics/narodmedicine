@@ -1,5 +1,8 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.core.cache import cache
+from django.db import connection
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, Value, When
 from django.db.models.functions import Coalesce, Lower, StrIndex
 from django.shortcuts import get_object_or_404
@@ -19,6 +22,7 @@ from api.serializers import (
     FavoriteCreateSerializer,
     FavoriteItemSerializer,
     FavoriteListResponseSerializer,
+    HealthResponseSerializer,
     HistoryCreateResponseSerializer,
     HistoryCreateSerializer,
     HistoryListResponseSerializer,
@@ -30,6 +34,7 @@ from api.serializers import (
     PushSubscribeRequestSerializer,
     PushUnsubscribeRequestSerializer,
     PushUnsubscribeResponseSerializer,
+    ReadinessResponseSerializer,
     RemedyFullSerializer,
     RemedyListResponseSerializer,
     RemedyRateRequestSerializer,
@@ -346,6 +351,75 @@ def serialize_disease_preview(
     if remedies_count is not None:
         payload["remedies_count"] = remedies_count
     return payload
+
+
+def build_service_payload(*, status_label: str, checks: dict | None = None) -> dict:
+    payload = {
+        "status": status_label,
+        "service": settings.SERVICE_NAME,
+        "version": settings.APP_VERSION,
+        "timestamp": timezone.now(),
+    }
+    if checks is not None:
+        payload["checks"] = checks
+    return payload
+
+
+class HealthView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Liveness check сервиса",
+        responses={status.HTTP_200_OK: HealthResponseSerializer},
+    )
+    def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        payload = build_service_payload(status_label="ok")
+        serializer = HealthResponseSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ReadinessView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Readiness check БД и Redis-кеша",
+        responses={
+            status.HTTP_200_OK: ReadinessResponseSerializer,
+            status.HTTP_503_SERVICE_UNAVAILABLE: ReadinessResponseSerializer,
+        },
+    )
+    def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        checks: dict[str, dict[str, str]] = {}
+        is_ready = True
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            checks["database"] = {"status": "ok"}
+        except Exception as exc:  # pragma: no cover - defensive branch
+            checks["database"] = {"status": "error", "detail": str(exc)}
+            is_ready = False
+
+        probe_key = f"healthcheck:{uuid4()}"
+        try:
+            cache.set(probe_key, "ok", timeout=30)
+            cached_value = cache.get(probe_key)
+            cache.delete(probe_key)
+            if cached_value != "ok":
+                raise RuntimeError("Cache roundtrip returned unexpected value.")
+            checks["cache"] = {"status": "ok"}
+        except Exception as exc:  # pragma: no cover - defensive branch
+            checks["cache"] = {"status": "error", "detail": str(exc)}
+            is_ready = False
+
+        payload = build_service_payload(
+            status_label="ok" if is_ready else "degraded",
+            checks=checks,
+        )
+        serializer = ReadinessResponseSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        response_status = (
+            status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+        return Response(serializer.data, status=response_status)
 
 
 class SearchView(APIView):

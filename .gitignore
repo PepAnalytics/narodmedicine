@@ -23,6 +23,9 @@ staticfiles/
 .env
 .env.*
 !.env.example
+!.env.prod.example
+deploy/certs/*
+!deploy/certs/.gitkeep
 
 # Tooling
 .mypy_cache/

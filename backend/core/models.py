@@ -208,3 +208,35 @@ class ViewHistory(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id}: {self.remedy_id} at {self.viewed_at.isoformat()}"
+
+
+class DeviceRegistration(models.Model):
+    class Platform(models.TextChoices):
+        ANDROID = "android", "Android"
+        IOS = "ios", "iOS"
+        WEB = "web", "Web"
+        OTHER = "other", "Other"
+
+    user_id = models.CharField(max_length=128)
+    fcm_token = models.CharField(max_length=512, unique=True)
+    platform = models.CharField(
+        max_length=16,
+        choices=Platform.choices,
+        default=Platform.OTHER,
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at",)
+        indexes = [
+            models.Index(
+                fields=("user_id", "is_active"),
+                name="device_user_active_idx",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} [{self.platform}] active={self.is_active}"

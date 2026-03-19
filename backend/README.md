@@ -1,4 +1,4 @@
-# Folk Medicine Backend (Sprint 2)
+# Folk Medicine Backend (Sprint 3)
 
 Бэкенд MVP для мобильного справочника по народной медицине.
 
@@ -78,6 +78,8 @@ docker compose exec backend python manage.py load_initial_data --reset
 - `POSTGRES_PORT` — порт Postgres (обычно `5432`)
 - `DATABASE_URL` — DSN строка подключения к БД
 - `REDIS_URL` — URL подключения к Redis
+- `FCM_CREDENTIALS_PATH` — путь до Firebase service account JSON
+- `FCM_PROJECT_ID` — ID Firebase проекта (опционально)
 
 ## Линтинг и pre-commit
 
@@ -100,7 +102,7 @@ black --config backend/pyproject.toml backend
 flake8 --config backend/.flake8 backend
 ```
 
-## API (Sprint 2)
+## API (Sprint 3)
 
 - `GET /api/symptoms/` (поддерживает нечёткий поиск: `?q=...`)
 - `POST /api/search/`
@@ -109,11 +111,28 @@ flake8 --config backend/.flake8 backend
 - `GET /api/remedies/{id}/`
 - `POST /api/remedies/{id}/rate/`
 - `POST /api/favorites/`
-- `GET /api/favorites/`
+- `GET /api/favorites/` (пагинация: `?page=1&page_size=20`)
 - `DELETE /api/favorites/{remedy_id}/`
 - `POST /api/history/`
 - `GET /api/history/`
 - `GET /api/sync/`
+- `POST /api/push/subscribe/`
+- `POST /api/push/unsubscribe/`
+- `POST /api/push/notify/`
+
+Единый формат ошибок:
+
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Validation error.",
+    "details": {
+      "user_id": "Provide user_id in body, query, or X-User-Id."
+    }
+  }
+}
+```
 
 Примеры:
 
@@ -157,7 +176,8 @@ curl -X POST http://localhost:8000/api/favorites/ \
 ```
 
 ```bash
-curl http://localhost:8000/api/favorites/ -H "X-User-Id: some-uuid"
+curl "http://localhost:8000/api/favorites/?page=1&page_size=20" \
+  -H "X-User-Id: some-uuid"
 ```
 
 ```bash
@@ -178,6 +198,27 @@ curl "http://localhost:8000/api/history/?page=1&page_size=20" \
 
 ```bash
 curl -i http://localhost:8000/api/sync/
+```
+
+```bash
+curl -X POST http://localhost:8000/api/push/subscribe/ \
+  -H "X-User-Id: some-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{"fcm_token":"token-value","platform":"android"}'
+```
+
+```bash
+curl -X POST http://localhost:8000/api/push/unsubscribe/ \
+  -H "X-User-Id: some-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{"fcm_token":"token-value"}'
+```
+
+```bash
+curl -X POST http://localhost:8000/api/push/notify/ \
+  -H "X-User-Id: some-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Напоминание","body":"Пора проверить избранные методы","dry_run":true}'
 ```
 
 ## Инициализационный датасет

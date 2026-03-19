@@ -116,9 +116,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "rest_framework.schemas.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "api.exceptions.custom_exception_handler",
 }
 
 SWAGGER_SETTINGS = {
     "USE_SESSION_AUTH": False,
     "SECURITY_DEFINITIONS": {},
 }
+
+FCM_CREDENTIALS_PATH = env("FCM_CREDENTIALS_PATH", default="")
+FCM_PROJECT_ID = env("FCM_PROJECT_ID", default="")

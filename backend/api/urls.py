@@ -5,6 +5,9 @@ from api.views import (
     FavoriteDeleteView,
     FavoriteListCreateView,
     HistoryListCreateView,
+    PushNotifyView,
+    PushSubscribeView,
+    PushUnsubscribeView,
     RemedyDetailView,
     RemedyListView,
     RemedyRateView,
@@ -32,4 +35,7 @@ urlpatterns = [
         name="favorite-delete",
     ),
     path("history/", HistoryListCreateView.as_view(), name="history-list-create"),
+    path("push/subscribe/", PushSubscribeView.as_view(), name="push-subscribe"),
+    path("push/unsubscribe/", PushUnsubscribeView.as_view(), name="push-unsubscribe"),
+    path("push/notify/", PushNotifyView.as_view(), name="push-notify"),
 ]

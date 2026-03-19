@@ -4,10 +4,11 @@ from django.shortcuts import get_object_or_404
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.push_service import PushConfigurationError, send_push_notifications
 from api.serializers import (
     DiseaseDetailSerializer,
     FavoriteCreateSerializer,
@@ -20,12 +21,19 @@ from api.serializers import (
     RemedyListResponseSerializer,
     RemedyRateRequestSerializer,
     RemedyRateResponseSerializer,
+    PushDeviceSerializer,
+    PushNotifyRequestSerializer,
+    PushNotifyResponseSerializer,
+    PushSubscribeRequestSerializer,
+    PushUnsubscribeRequestSerializer,
+    PushUnsubscribeResponseSerializer,
     SearchRequestSerializer,
     SearchResponseSerializer,
     SymptomListSerializer,
     SyncResponseSerializer,
 )
 from core.models import (
+    DeviceRegistration,
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
@@ -60,6 +68,28 @@ EVIDENCE_LEVEL_QUERY_PARAM = openapi.Parameter(
     type=openapi.TYPE_STRING,
     required=False,
 )
+
+PAGE_QUERY_PARAM = openapi.Parameter(
+    "page",
+    openapi.IN_QUERY,
+    description="Номер страницы (начиная с 1).",
+    type=openapi.TYPE_INTEGER,
+    required=False,
+)
+
+PAGE_SIZE_QUERY_PARAM = openapi.Parameter(
+    "page_size",
+    openapi.IN_QUERY,
+    description="Размер страницы (по умолчанию 20, максимум 100).",
+    type=openapi.TYPE_INTEGER,
+    required=False,
+)
+
+
+class PushServiceUnavailable(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "Push service is not configured."
+    default_code = "service_unavailable"
 
 
 def serialize_evidence_level(evidence_level: EvidenceLevel) -> dict:
@@ -174,6 +204,19 @@ def serialize_remedy(remedy: Remedy) -> dict:
         ],
         "likes_count": remedy.likes_count,
         "dislikes_count": remedy.dislikes_count,
+    }
+
+
+def serialize_device(device: DeviceRegistration) -> dict:
+    return {
+        "id": device.id,
+        "user_id": device.user_id,
+        "fcm_token": device.fcm_token,
+        "platform": device.platform,
+        "is_active": device.is_active,
+        "created_at": device.created_at,
+        "updated_at": device.updated_at,
+        "last_seen_at": device.last_seen_at,
     }
 
 
@@ -450,12 +493,31 @@ class RemedyRateView(APIView):
 class FavoriteListCreateView(APIView):
     @swagger_auto_schema(
         operation_summary="Список избранных методов пользователя",
-        manual_parameters=[USER_ID_HEADER_PARAM, USER_ID_QUERY_PARAM],
+        manual_parameters=[
+            USER_ID_HEADER_PARAM,
+            USER_ID_QUERY_PARAM,
+            PAGE_QUERY_PARAM,
+            PAGE_SIZE_QUERY_PARAM,
+        ],
         responses={status.HTTP_200_OK: FavoriteListResponseSerializer},
     )
     def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
         user_id = resolve_user_id(request)
-        favorites = (
+        page = parse_positive_int(
+            request.query_params.get("page"),
+            field_name="page",
+            default=1,
+            max_value=10_000,
+        )
+        page_size = parse_positive_int(
+            request.query_params.get("page_size"),
+            field_name="page_size",
+            default=20,
+            max_value=100,
+        )
+        offset = (page - 1) * page_size
+
+        favorites_queryset = (
             Favorite.objects.filter(user_id=user_id)
             .select_related("remedy__disease", "remedy__evidence_level")
             .prefetch_related(
@@ -467,14 +529,19 @@ class FavoriteListCreateView(APIView):
             .order_by("-created_at")
         )
 
+        total = favorites_queryset.count()
+        favorites = list(favorites_queryset[offset : offset + page_size])
         payload = {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
             "favorites": [
                 {
                     "favorited_at": favorite.created_at,
                     "remedy": serialize_remedy(favorite.remedy),
                 }
                 for favorite in favorites
-            ]
+            ],
         }
         serializer = FavoriteListResponseSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
@@ -541,10 +608,7 @@ class FavoriteDeleteView(APIView):
             remedy_id=remedy_id,
         ).delete()
         if deleted_count == 0:
-            return Response(
-                {"detail": "Favorite not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            raise NotFound("Favorite not found.")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -584,20 +648,8 @@ class HistoryListCreateView(APIView):
         manual_parameters=[
             USER_ID_HEADER_PARAM,
             USER_ID_QUERY_PARAM,
-            openapi.Parameter(
-                "page",
-                openapi.IN_QUERY,
-                description="Номер страницы (начиная с 1).",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
-            openapi.Parameter(
-                "page_size",
-                openapi.IN_QUERY,
-                description="Размер страницы (по умолчанию 20, максимум 100).",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
+            PAGE_QUERY_PARAM,
+            PAGE_SIZE_QUERY_PARAM,
         ],
         responses={status.HTTP_200_OK: HistoryListResponseSerializer},
     )
@@ -673,3 +725,161 @@ class SyncView(APIView):
         response = Response(serializer.data, status=status.HTTP_200_OK)
         response["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
         return response
+
+
+class PushSubscribeView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Подписка устройства на push-уведомления",
+        manual_parameters=[USER_ID_HEADER_PARAM],
+        request_body=PushSubscribeRequestSerializer,
+        responses={
+            status.HTTP_201_CREATED: PushDeviceSerializer,
+            status.HTTP_200_OK: PushDeviceSerializer,
+        },
+    )
+    def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        serializer = PushSubscribeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_id = resolve_user_id(
+            request,
+            fallback=serializer.validated_data.get("user_id"),
+        )
+        token = serializer.validated_data["fcm_token"].strip()
+        platform = serializer.validated_data["platform"]
+
+        device, created = DeviceRegistration.objects.update_or_create(
+            fcm_token=token,
+            defaults={
+                "user_id": user_id,
+                "platform": platform,
+                "is_active": True,
+            },
+        )
+        payload = serialize_device(device)
+        response_serializer = PushDeviceSerializer(data=payload)
+        response_serializer.is_valid(raise_exception=True)
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(response_serializer.data, status=response_status)
+
+
+class PushUnsubscribeView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Отписка устройства от push-уведомлений",
+        manual_parameters=[USER_ID_HEADER_PARAM],
+        request_body=PushUnsubscribeRequestSerializer,
+        responses={status.HTTP_200_OK: PushUnsubscribeResponseSerializer},
+    )
+    def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        serializer = PushUnsubscribeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_id = resolve_user_id(
+            request,
+            fallback=serializer.validated_data.get("user_id"),
+        )
+        token = serializer.validated_data["fcm_token"].strip()
+
+        device = get_object_or_404(
+            DeviceRegistration,
+            user_id=user_id,
+            fcm_token=token,
+        )
+        if device.is_active:
+            device.is_active = False
+            device.save(update_fields=("is_active", "updated_at", "last_seen_at"))
+
+        response_serializer = PushUnsubscribeResponseSerializer(
+            data={"detail": "Device unsubscribed."}
+        )
+        response_serializer.is_valid(raise_exception=True)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+class PushNotifyView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Базовая отправка push-уведомления через Firebase",
+        manual_parameters=[USER_ID_HEADER_PARAM, USER_ID_QUERY_PARAM],
+        request_body=PushNotifyRequestSerializer,
+        responses={
+            status.HTTP_200_OK: PushNotifyResponseSerializer,
+            status.HTTP_503_SERVICE_UNAVAILABLE: "Push service unavailable.",
+        },
+    )
+    def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        serializer = PushNotifyRequestSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        user_id: str | None = None
+        for candidate in (
+            serializer.validated_data.get("user_id"),
+            request.headers.get("X-User-Id"),
+            request.query_params.get("user_id"),
+        ):
+            if candidate is None:
+                continue
+            value = str(candidate).strip()
+            if value:
+                user_id = value
+                break
+
+        tokens: list[str] = []
+        explicit_tokens = serializer.validated_data.get("tokens")
+        if explicit_tokens:
+            tokens.extend([token.strip() for token in explicit_tokens if token.strip()])
+
+        if user_id:
+            user_devices = DeviceRegistration.objects.filter(
+                user_id=user_id,
+                is_active=True,
+            )
+            tokens.extend(
+                list(
+                    user_devices.values_list("fcm_token", flat=True),
+                )
+            )
+
+        deduplicated_tokens: list[str] = []
+        seen: set[str] = set()
+        for token in tokens:
+            if token in seen:
+                continue
+            deduplicated_tokens.append(token)
+            seen.add(token)
+
+        results: list[dict] = []
+        if deduplicated_tokens:
+            try:
+                results = send_push_notifications(
+                    tokens=deduplicated_tokens,
+                    title=serializer.validated_data["title"],
+                    body=serializer.validated_data["body"],
+                    data=serializer.validated_data.get("data", {}),
+                    dry_run=serializer.validated_data.get("dry_run", False),
+                )
+            except PushConfigurationError as exc:
+                raise PushServiceUnavailable(str(exc)) from exc
+
+        failed_tokens = {
+            result["token"] for result in results if result.get("status") == "failed"
+        }
+        if failed_tokens:
+            DeviceRegistration.objects.filter(
+                fcm_token__in=failed_tokens,
+                is_active=True,
+            ).update(is_active=False)
+
+        sent_count = sum(1 for result in results if result.get("status") == "sent")
+        failed_count = sum(1 for result in results if result.get("status") == "failed")
+        payload = {
+            "requested": len(deduplicated_tokens),
+            "sent": sent_count,
+            "failed": failed_count,
+            "results": results,
+        }
+        response_serializer = PushNotifyResponseSerializer(data=payload)
+        response_serializer.is_valid(raise_exception=True)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)

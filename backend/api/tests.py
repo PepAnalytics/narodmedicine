@@ -1,8 +1,11 @@
+from unittest.mock import patch
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import (
+    DeviceRegistration,
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
@@ -234,6 +237,9 @@ class FavoriteApiTests(BaseApiDataMixin, APITestCase):
             HTTP_X_USER_ID=self.USER_ID,
         )
         self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_response.data["page"], 1)
+        self.assertEqual(list_response.data["page_size"], 20)
+        self.assertEqual(list_response.data["total"], 1)
         self.assertEqual(len(list_response.data["favorites"]), 1)
         self.assertEqual(
             list_response.data["favorites"][0]["remedy"]["id"],
@@ -252,7 +258,41 @@ class FavoriteApiTests(BaseApiDataMixin, APITestCase):
     def test_favorites_requires_user_id(self) -> None:
         response = self.client.get(reverse("favorite-list-create"))
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("user_id", response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("user_id", response.data["error"]["details"])
+
+    def test_favorites_returns_paginated_results(self) -> None:
+        self.client.post(
+            reverse("favorite-list-create"),
+            data={"remedy_id": self.remedy_flu.id},
+            format="json",
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+        self.client.post(
+            reverse("favorite-list-create"),
+            data={"remedy_id": self.remedy_migraine_high.id},
+            format="json",
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+
+        response = self.client.get(
+            reverse("favorite-list-create"),
+            {"page": 1, "page_size": 1},
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["page"], 1)
+        self.assertEqual(response.data["page_size"], 1)
+        self.assertEqual(response.data["total"], 2)
+        self.assertEqual(len(response.data["favorites"]), 1)
+
+    def test_favorite_delete_returns_standard_not_found_error(self) -> None:
+        response = self.client.delete(
+            reverse("favorite-delete", kwargs={"remedy_id": 99999}),
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["error"]["code"], "not_found")
 
 
 class HistoryApiTests(BaseApiDataMixin, APITestCase):
@@ -294,7 +334,18 @@ class HistoryApiTests(BaseApiDataMixin, APITestCase):
     def test_history_requires_user_id(self) -> None:
         response = self.client.get(reverse("history-list-create"))
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("user_id", response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("user_id", response.data["error"]["details"])
+
+    def test_history_validates_page_size(self) -> None:
+        response = self.client.get(
+            reverse("history-list-create"),
+            {"page_size": 0},
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("page_size", response.data["error"]["details"])
 
 
 class SyncApiTests(BaseApiDataMixin, APITestCase):
@@ -307,3 +358,121 @@ class SyncApiTests(BaseApiDataMixin, APITestCase):
         self.assertIn("evidence_levels", response.data)
         self.assertIn("Cache-Control", response.headers)
         self.assertIn("max-age", response.headers["Cache-Control"])
+
+
+class PushApiTests(BaseApiDataMixin, APITestCase):
+    USER_ID = "push-user"
+
+    def test_push_subscribe_and_unsubscribe(self) -> None:
+        subscribe_url = reverse("push-subscribe")
+        unsubscribe_url = reverse("push-unsubscribe")
+
+        subscribe_response = self.client.post(
+            subscribe_url,
+            data={"fcm_token": "token-1", "platform": "android"},
+            format="json",
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+        self.assertEqual(subscribe_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(DeviceRegistration.objects.count(), 1)
+        device = DeviceRegistration.objects.get()
+        self.assertTrue(device.is_active)
+        self.assertEqual(device.platform, "android")
+
+        unsubscribe_response = self.client.post(
+            unsubscribe_url,
+            data={"fcm_token": "token-1"},
+            format="json",
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+        self.assertEqual(unsubscribe_response.status_code, status.HTTP_200_OK)
+        device.refresh_from_db()
+        self.assertFalse(device.is_active)
+
+    @patch("api.views.send_push_notifications")
+    def test_push_notify_delivers_to_user_devices(self, send_mock) -> None:
+        DeviceRegistration.objects.create(
+            user_id=self.USER_ID,
+            fcm_token="token-user-1",
+            platform="android",
+            is_active=True,
+        )
+        send_mock.return_value = [
+            {
+                "token": "token-user-1",
+                "status": "sent",
+                "message_id": "m-1",
+            }
+        ]
+
+        response = self.client.post(
+            reverse("push-notify"),
+            data={"title": "Тест", "body": "Проверьте уведомление"},
+            format="json",
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["requested"], 1)
+        self.assertEqual(response.data["sent"], 1)
+        self.assertEqual(response.data["failed"], 0)
+        send_mock.assert_called_once()
+
+    @patch("api.views.send_push_notifications")
+    def test_push_notify_marks_failed_tokens_inactive(self, send_mock) -> None:
+        DeviceRegistration.objects.create(
+            user_id=self.USER_ID,
+            fcm_token="token-user-2",
+            platform="ios",
+            is_active=True,
+        )
+        send_mock.return_value = [
+            {
+                "token": "token-user-2",
+                "status": "failed",
+                "error": "registration token not registered",
+            }
+        ]
+
+        response = self.client.post(
+            reverse("push-notify"),
+            data={"title": "Тест", "body": "Проверьте уведомление"},
+            format="json",
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["failed"], 1)
+        device = DeviceRegistration.objects.get(fcm_token="token-user-2")
+        self.assertFalse(device.is_active)
+
+    @patch("api.views.send_push_notifications")
+    def test_push_notify_returns_service_unavailable_when_config_missing(
+        self,
+        send_mock,
+    ) -> None:
+        from api.push_service import PushConfigurationError
+
+        send_mock.side_effect = PushConfigurationError("Missing credentials")
+
+        response = self.client.post(
+            reverse("push-notify"),
+            data={
+                "title": "Тест",
+                "body": "Проверьте уведомление",
+                "tokens": ["token-a"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data["error"]["code"], "service_unavailable")
+
+    def test_push_notify_requires_target(self) -> None:
+        response = self.client.post(
+            reverse("push-notify"),
+            data={"title": "Тест", "body": "Без таргета"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "validation_error")

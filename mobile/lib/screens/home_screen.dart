@@ -1,272 +1,247 @@
 import 'package:flutter/material.dart';
-import '../../services/api_service.dart';
-import '../../services/user_service.dart';
-import '../../services/database_service.dart';
-import '../../utils/app_constants.dart';
-import '../../widgets/symptom_search_field.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../theme/app_design_tokens.dart';
+import '../widgets/widgets.dart';
+import '../models/models.dart';
 
-/// Главный экран с поиском симптомов
+/// Главный экран с поиском и популярными болезнями
 class HomeScreen extends StatefulWidget {
-  final DatabaseService? databaseService;
-
-  const HomeScreen({super.key, this.databaseService});
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  ApiService? _apiService;
-  UserService? _userService;
+  final TextEditingController _searchController = TextEditingController();
   List<String> _selectedSymptoms = [];
-  bool _isLoading = false;
+  List<Disease> _popularDiseases = [];
+  bool _isLoadingPopular = false;
   String? _error;
+
+  // Популярные симптомы (захардкожены для примера)
+  final List<String> _popularSymptoms = [
+    'Головная боль',
+    'Температура',
+    'Кашель',
+    'Насморк',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _initServices();
+    _loadPopularDiseases();
   }
 
-  Future<void> _initServices() async {
-    _userService = await UserService.init();
-    setState(() {});
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  ApiService _getApiService() {
-    if (_apiService == null) {
-      _apiService = ApiService(
-        baseUrl: AppConstants.apiBaseUrl,
-        getUserId: () async => _userService?.getUserId() ?? '',
-      );
-    }
-    return _apiService!;
-  }
-
-  Future<void> _searchSymptoms() async {
-    if (_selectedSymptoms.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Введите симптомы через запятую'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _loadPopularDiseases() async {
+    setState(() => _isLoadingPopular = true);
 
     try {
-      final apiService = _getApiService();
-      final diseases = await apiService.searchSymptoms(_selectedSymptoms);
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/api/diseases/popular/'),
+      ).timeout(const Duration(seconds: 30));
 
-      if (!mounted) return;
-
-      if (diseases.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ничего не найдено по указанным симптомам'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        setState(() => _isLoading = false);
-        return;
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        final List<dynamic> diseasesJson = jsonData['diseases'] as List<dynamic>;
+        
+        setState(() {
+          _popularDiseases = diseasesJson.map((json) => Disease.fromJson(json)).toList();
+          _isLoadingPopular = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Ошибка загрузки: ${response.statusCode}';
+          _isLoadingPopular = false;
+        });
       }
-
-      // Переход на экран результатов
-      if (!mounted) return;
-      Navigator.pushNamed(
-        context,
-        AppConstants.searchResultsRoute,
-        arguments: diseases,
-      );
     } catch (e) {
-      if (!mounted) return;
       setState(() {
         _error = e.toString();
-        _isLoading = false;
+        _isLoadingPopular = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка: ${_error ?? e.toString()}'),
-          backgroundColor: Colors.red,
-          action: SnackBarAction(
-            label: 'Повторить',
-            textColor: Colors.white,
-            onPressed: _searchSymptoms,
-          ),
-        ),
-      );
     }
+  }
+
+  void _handleSearch() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
+    // Переход на экран результатов
+    Navigator.pushNamed(
+      context,
+      '/search-results',
+      arguments: {'query': query, 'symptoms': _selectedSymptoms},
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 32),
-              // Логотип/Заголовок
-              Icon(
-                Icons.eco,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 16),
-              Text(
+              // Заголовок
+              const Text(
                 'Народная Медицина',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
+                style: TextStyle(
+                  fontSize: AppDesignTokens.fontSizeH1,
+                  fontWeight: AppDesignTokens.fontWeightBold,
+                  color: AppDesignTokens.textPrimary,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
-              Text(
+              const SizedBox(height: AppDesignTokens.spacingXS),
+              const Text(
                 'Найдите народные методы лечения по симптомам',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                style: TextStyle(
+                  fontSize: AppDesignTokens.fontSizeBody,
+                  color: AppDesignTokens.textSecondary,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 48),
-              // Поле ввода симптомов с автодополнением
-              SymptomSearchField(
-                onSymptomsSelected: (symptoms) {
-                  setState(() => _selectedSymptoms = symptoms);
+              const SizedBox(height: AppDesignTokens.spacingLG),
+
+              // SearchBar
+              AppSearchBar(
+                controller: _searchController,
+                hintText: 'Введите симптомы...',
+                onSearch: _handleSearch,
+                onChanged: (value) {
+                  // Можно добавить автодополнение
                 },
               ),
-              const SizedBox(height: 16),
-              // Кнопка поиска
-              ElevatedButton.icon(
-                onPressed: _isLoading || _userService == null
-                    ? null
-                    : _searchSymptoms,
-                icon: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
-                        ),
-                      )
-                    : const Icon(Icons.search),
-                label: Text(_isLoading ? 'Поиск...' : 'Найти'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+              const SizedBox(height: AppDesignTokens.spacingLG),
+
+              // Популярные симптомы
+              const Text(
+                'Популярные симптомы',
+                style: TextStyle(
+                  fontSize: AppDesignTokens.fontSizeH3,
+                  fontWeight: AppDesignTokens.fontWeightBold,
+                  color: AppDesignTokens.textPrimary,
                 ),
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(
-                      AppConstants.borderRadius,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        color: Theme.of(context).colorScheme.onErrorContainer,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onErrorContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: AppDesignTokens.spacingSM),
+              Wrap(
+                spacing: AppDesignTokens.spacingSM,
+                runSpacing: AppDesignTokens.spacingSM,
+                children: _popularSymptoms.map((symptom) {
+                  final isSelected = _selectedSymptoms.contains(symptom);
+                  return AppChip(
+                    label: symptom,
+                    isSelected: isSelected,
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedSymptoms.remove(symptom);
+                        } else {
+                          _selectedSymptoms.add(symptom);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: AppDesignTokens.spacingLG),
+
+              // Популярные болезни
+              const Text(
+                'Популярные болезни',
+                style: TextStyle(
+                  fontSize: AppDesignTokens.fontSizeH2,
+                  fontWeight: AppDesignTokens.fontWeightBold,
+                  color: AppDesignTokens.textPrimary,
                 ),
-              ],
-              const Spacer(),
-              // Подсказки
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(
-                    AppConstants.borderRadius,
+              ),
+              const SizedBox(height: AppDesignTokens.spacingSM),
+              
+              if (_isLoadingPopular)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(AppDesignTokens.spacingLG),
+                    child: CircularProgressIndicator(),
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                )
+              else if (_error != null)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
+                    child: Column(
                       children: [
-                        Icon(
-                          Icons.lightbulb_outline,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 20,
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppDesignTokens.danger,
+                          size: 48,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(height: AppDesignTokens.spacingSM),
                         Text(
-                          'Примеры симптомов:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
+                          _error!,
+                          style: const TextStyle(
+                            color: AppDesignTokens.textSecondary,
                           ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: AppDesignTokens.spacingMD),
+                        AppButton(
+                          text: 'Повторить',
+                          onPressed: _loadPopularDiseases,
+                          type: AppButtonType.outline,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: const [
-                        Chip(
-                          label: Text('Насморк'),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        Chip(
-                          label: Text('Кашель'),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        Chip(
-                          label: Text('Температура'),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        Chip(
-                          label: Text('Боль в горле'),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
+                  ),
+                )
+              else if (_popularDiseases.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(AppDesignTokens.spacingLG),
+                    child: Text(
+                      'Нет популярных болезней',
+                      style: TextStyle(color: AppDesignTokens.textMuted),
                     ),
-                  ],
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 280,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _popularDiseases.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: AppDesignTokens.spacingMD),
+                    itemBuilder: (context, index) {
+                      final disease = _popularDiseases[index];
+                      return SizedBox(
+                        width: 280,
+                        child: AppDiseaseCard(
+                          disease: disease,
+                          onTap: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/disease',
+                              arguments: disease,
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
                 ),
+              const SizedBox(height: AppDesignTokens.spacingLG),
+
+              // Warning Block
+              const AppWarningBlock(
+                title: 'Важное предупреждение',
+                message: 'Данное приложение не ставит диагноз и не заменяет консультацию врача. Все материалы носят ознакомительный характер.',
               ),
-              const SizedBox(height: 24),
-              // Кнопка "О приложении"
-              OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pushNamed(context, AppConstants.aboutRoute);
-                },
-                icon: const Icon(Icons.info_outline),
-                label: const Text('О приложении'),
-              ),
-              const SizedBox(height: 16),
             ],
           ),
         ),

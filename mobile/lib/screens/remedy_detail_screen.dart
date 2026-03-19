@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../theme/app_design_tokens.dart';
+import '../widgets/widgets.dart';
 import '../models/models.dart';
-import '../services/services.dart';
-import '../utils/app_constants.dart';
-import '../widgets/evidence_level_badge.dart';
 
 /// Экран деталей метода лечения
 class RemedyDetailScreen extends StatefulWidget {
@@ -33,64 +34,35 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
     });
 
     try {
-      // Загрузка из API или кэша
-      final db = DatabaseService();
-      await db.init();
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/api/remedies/${widget.remedyId}/'),
+      ).timeout(const Duration(seconds: 30));
 
-      final cached = db.getRemedyById(widget.remedyId);
-      if (cached != null) {
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        
         setState(() {
-          _remedy = Remedy(
-            id: cached.id,
-            name: cached.name,
-            description: cached.description,
-            recipe: cached.recipe,
-            risks: cached.risks,
-            source: cached.source,
-            evidenceLevel: EvidenceLevel(
-              id: cached.evidenceLevelId,
-              code: 'B',
-              description: 'Средний',
-              color: '#FFC107',
-              rank: 2,
-            ),
-            likesCount: cached.likesCount,
-            dislikesCount: cached.dislikesCount,
-            region: cached.region,
-            culturalContext: cached.culturalContext,
-          );
+          _remedy = Remedy.fromJson(jsonData);
           _isLoading = false;
         });
-        return;
-      }
-
-      final apiService = ApiService(
-        baseUrl: AppConstants.apiBaseUrl,
-        getUserId: () async => '',
-      );
-      final remedy = await apiService.getRemedy(widget.remedyId);
-
-      if (mounted) {
+      } else {
         setState(() {
-          _remedy = remedy;
+          _error = 'Ошибка загрузки: ${response.statusCode}';
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
   Future<void> _shareRemedy() async {
     if (_remedy == null) return;
 
-    final shareText =
-        '''
+    final shareText = '''
 ${_remedy!.name}
 
 ${_remedy!.description}
@@ -118,38 +90,31 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
       );
     }
 
-    if (_error != null) {
+    if (_error != null || _remedy == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Метод лечения')),
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
+                const Icon(
                   Icons.error_outline,
+                  color: AppDesignTokens.danger,
                   size: 64,
-                  color: Theme.of(context).colorScheme.error,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppDesignTokens.spacingMD),
                 Text(
-                  'Ошибка загрузки',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                  _error ?? 'Метод не найден',
+                  style: const TextStyle(color: AppDesignTokens.textSecondary),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
+                const SizedBox(height: AppDesignTokens.spacingLG),
+                AppButton(
+                  text: 'Повторить',
                   onPressed: _loadRemedy,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Повторить'),
+                  type: AppButtonType.outline,
                 ),
               ],
             ),
@@ -169,123 +134,222 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.share_outlined),
             onPressed: _shareRemedy,
             tooltip: 'Поделиться',
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Заголовок и уровень доказательности
+            // Заголовок + EvidenceBadge
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
                     remedy.name,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: const TextStyle(
+                      fontSize: AppDesignTokens.fontSizeH1,
+                      fontWeight: AppDesignTokens.fontWeightBold,
+                      color: AppDesignTokens.textPrimary,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                EvidenceLevelBadge(level: remedy.evidenceLevel),
+                const SizedBox(width: AppDesignTokens.spacingSM),
+                AppEvidenceBadge(code: remedy.evidenceLevel.code),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppDesignTokens.spacingLG),
 
-            // Регион и культурный контекст
+            // Блок культуры
             if (remedy.region.isNotEmpty || remedy.culturalContext != null) ...[
-              _buildRegionCard(context, remedy),
-              const SizedBox(height: 16),
+              _buildCultureCard(remedy),
+              const SizedBox(height: AppDesignTokens.spacingLG),
             ],
 
             // Описание
-            _buildSectionCard(
-              context,
-              title: 'Описание',
+            _buildSection(
               icon: Icons.description_outlined,
+              title: 'Описание',
               child: Text(
                 remedy.description,
-                style: Theme.of(context).textTheme.bodyLarge,
+                style: const TextStyle(
+                  fontSize: AppDesignTokens.fontSizeBody,
+                  color: AppDesignTokens.textSecondary,
+                  height: 1.5,
+                ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppDesignTokens.spacingMD),
 
             // Рецепт
-            _buildSectionCard(
-              context,
-              title: 'Рецепт',
+            _buildSection(
               icon: Icons.restaurant_menu,
+              title: 'Рецепт',
               child: Text(
                 remedy.recipe,
-                style: Theme.of(context).textTheme.bodyLarge,
+                style: const TextStyle(
+                  fontSize: AppDesignTokens.fontSizeBody,
+                  color: AppDesignTokens.textSecondary,
+                  height: 1.5,
+                ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppDesignTokens.spacingMD),
 
             // Ингредиенты
             if (remedy.ingredients.isNotEmpty) ...[
-              _buildIngredientsCard(context, remedy),
-              const SizedBox(height: 16),
+              _buildSection(
+                icon: Icons.shopping_basket_outlined,
+                title: 'Ингредиенты',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: remedy.ingredients.map((ingredient) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: AppDesignTokens.spacingXS),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: AppDesignTokens.iconSizeSmall,
+                            color: AppDesignTokens.success,
+                          ),
+                          const SizedBox(width: AppDesignTokens.spacingSM),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ingredient.name,
+                                  style: const TextStyle(
+                                    fontSize: AppDesignTokens.fontSizeBody,
+                                    color: AppDesignTokens.textPrimary,
+                                    fontWeight: AppDesignTokens.fontWeightMedium,
+                                  ),
+                                ),
+                                // Альтернативные названия
+                                if (ingredient.alternativeNames != null &&
+                                    ingredient.alternativeNames!.isNotEmpty) ...[
+                                  const SizedBox(height: AppDesignTokens.spacingXS),
+                                  Wrap(
+                                    spacing: AppDesignTokens.spacingXS,
+                                    runSpacing: AppDesignTokens.spacingXS,
+                                    children: ingredient.alternativeNames!.entries.map((entry) {
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: AppDesignTokens.spacingSM,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppDesignTokens.bgMuted,
+                                          borderRadius: BorderRadius.circular(AppDesignTokens.radiusSM),
+                                        ),
+                                        child: Text(
+                                          '${entry.key}: ${entry.value}',
+                                          style: const TextStyle(
+                                            fontSize: AppDesignTokens.fontSizeCaption,
+                                            color: AppDesignTokens.textMuted,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (ingredient.amount != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppDesignTokens.spacingSM,
+                                vertical: AppDesignTokens.spacingXS,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppDesignTokens.lightGreen,
+                                borderRadius: BorderRadius.circular(AppDesignTokens.radiusSM),
+                              ),
+                              child: Text(
+                                ingredient.amount!,
+                                style: const TextStyle(
+                                  fontSize: AppDesignTokens.fontSizeCaption,
+                                  fontWeight: AppDesignTokens.fontWeightBold,
+                                  color: AppDesignTokens.success,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: AppDesignTokens.spacingMD),
             ],
 
             // Риски
             if (remedy.risks.isNotEmpty) ...[
-              _buildSectionCard(
-                context,
+              _buildSection(
+                icon: Icons.warning_amber_outlined,
                 title: 'Возможные риски',
-                icon: Icons.warning_amber_rounded,
-                color: Colors.orange,
                 child: Text(
                   remedy.risks,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.deepOrange.shade700,
+                  style: const TextStyle(
+                    fontSize: AppDesignTokens.fontSizeBody,
+                    color: AppDesignTokens.textSecondary,
+                    height: 1.5,
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppDesignTokens.spacingMD),
             ],
 
             // Источник
-            _buildSectionCard(
-              context,
-              title: 'Источник',
+            _buildSection(
               icon: Icons.book_outlined,
+              title: 'Источник',
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.link,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.primary,
+                    size: AppDesignTokens.iconSizeSmall,
+                    color: AppDesignTokens.primaryGreen,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppDesignTokens.spacingSM),
                   Expanded(
                     child: Text(
                       remedy.source,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
+                      style: const TextStyle(
+                        fontSize: AppDesignTokens.fontSizeBody,
+                        color: AppDesignTokens.primaryGreen,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppDesignTokens.spacingXL),
+
+            // Warning Block - дисклеймер
+            const AppWarningBlock(
+              title: 'Важное предупреждение',
+              message: 'Данное приложение не ставит диагноз и не заменяет консультацию врача. Все материалы носят ознакомительный характер.',
+            ),
+            const SizedBox(height: AppDesignTokens.spacingXL),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRegionCard(BuildContext context, Remedy remedy) {
+  Widget _buildCultureCard(Remedy remedy) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -293,24 +357,27 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
               children: [
                 Text(
                   _getRegionEmoji(remedy.region),
-                  style: const TextStyle(fontSize: 24),
+                  style: const TextStyle(fontSize: 28),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppDesignTokens.spacingSM),
                 Text(
                   _getRegionName(remedy.region),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  style: const TextStyle(
+                    fontSize: AppDesignTokens.fontSizeH3,
+                    fontWeight: AppDesignTokens.fontWeightBold,
+                    color: AppDesignTokens.textPrimary,
                   ),
                 ),
               ],
             ),
-            if (remedy.culturalContext != null &&
-                remedy.culturalContext!.isNotEmpty) ...[
-              const SizedBox(height: 12),
+            if (remedy.culturalContext != null && remedy.culturalContext!.isNotEmpty) ...[
+              const SizedBox(height: AppDesignTokens.spacingSM),
               Text(
                 remedy.culturalContext!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                style: const TextStyle(
+                  fontSize: AppDesignTokens.fontSizeBody,
+                  color: AppDesignTokens.textSecondary,
+                  height: 1.5,
                 ),
               ),
             ],
@@ -320,111 +387,14 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
     );
   }
 
-  Widget _buildIngredientsCard(BuildContext context, Remedy remedy) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.shopping_basket_outlined,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Ингредиенты',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ...remedy.ingredients.map((ingredient) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.check_circle_outline, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            ingredient.name,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                        ),
-                        if (ingredient.amount != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              ingredient.amount!,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                      ],
-                    ),
-                    // Альтернативные названия
-                    if (ingredient.alternativeNames != null &&
-                        ingredient.alternativeNames!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 26),
-                        child: Wrap(
-                          spacing: 6,
-                          children: ingredient.alternativeNames!.entries.map((
-                            entry,
-                          ) {
-                            return Chip(
-                              label: Text(
-                                '${entry.key}: ${entry.value}',
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              padding: EdgeInsets.zero,
-                              visualDensity: VisualDensity.compact,
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.surfaceVariant,
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            }).toList(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionCard(
-    BuildContext context, {
-    required String title,
+  Widget _buildSection({
     required IconData icon,
+    required String title,
     required Widget child,
-    Color? color,
   }) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -432,18 +402,21 @@ ${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
               children: [
                 Icon(
                   icon,
-                  color: color ?? Theme.of(context).colorScheme.primary,
+                  color: AppDesignTokens.primaryGreen,
+                  size: AppDesignTokens.iconSizeMedium,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppDesignTokens.spacingSM),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  style: const TextStyle(
+                    fontSize: AppDesignTokens.fontSizeH3,
+                    fontWeight: AppDesignTokens.fontWeightBold,
+                    color: AppDesignTokens.textPrimary,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppDesignTokens.spacingSM),
             child,
           ],
         ),

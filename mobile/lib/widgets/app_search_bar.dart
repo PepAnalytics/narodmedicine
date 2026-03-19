@@ -26,10 +26,7 @@ class AppSearchBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppDesignTokens.bgCard,
         borderRadius: BorderRadius.circular(AppDesignTokens.radiusMD),
-        border: Border.all(
-          color: AppDesignTokens.borderColor,
-          width: 1,
-        ),
+        border: Border.all(color: AppDesignTokens.borderColor, width: 1),
       ),
       child: Row(
         children: [
@@ -76,7 +73,9 @@ class AppSearchBar extends StatelessWidget {
                   height: AppDesignTokens.minTapSize,
                   decoration: BoxDecoration(
                     color: AppDesignTokens.primaryGreen,
-                    borderRadius: BorderRadius.circular(AppDesignTokens.radiusSM),
+                    borderRadius: BorderRadius.circular(
+                      AppDesignTokens.radiusSM,
+                    ),
                   ),
                   child: const Icon(
                     Icons.arrow_forward,

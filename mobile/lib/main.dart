@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'config/app_config.dart';
 import 'theme/theme.dart';
 import 'widgets/widgets.dart';
 import 'screens/screens.dart';
@@ -6,6 +7,9 @@ import 'models/models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  debugPrint('🚀 API URL: ${AppConfig.apiUrl}');
+  
   runApp(const NarodMedicineApp());
 }
 

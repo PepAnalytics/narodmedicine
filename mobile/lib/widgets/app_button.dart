@@ -78,7 +78,7 @@ class AppButton extends StatelessWidget {
 
   Color _getBackgroundColor() {
     if (isLoading) return AppDesignTokens.textMuted;
-    
+
     switch (type) {
       case AppButtonType.primary:
         return AppDesignTokens.primaryGreen;
@@ -91,7 +91,7 @@ class AppButton extends StatelessWidget {
 
   Color _getForegroundColor() {
     if (isLoading) return Colors.white;
-    
+
     switch (type) {
       case AppButtonType.primary:
         return Colors.white;
@@ -104,7 +104,7 @@ class AppButton extends StatelessWidget {
 
   Color? _getBorderColor() {
     if (isLoading) return AppDesignTokens.textMuted;
-    
+
     switch (type) {
       case AppButtonType.primary:
         return null;

@@ -56,7 +56,14 @@ class RemedyIngredientInline(admin.TabularInline):
 
 @admin.register(Remedy)
 class RemedyAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "disease", "evidence_level")
+    list_display = (
+        "id",
+        "name",
+        "disease",
+        "evidence_level",
+        "likes_count",
+        "dislikes_count",
+    )
     search_fields = ("name", "description", "recipe", "disease__name")
     list_filter = ("evidence_level", "disease")
     inlines = (RemedyIngredientInline,)

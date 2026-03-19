@@ -8,13 +8,27 @@ class SearchRequestSerializer(serializers.Serializer):
     )
 
 
+class SearchMatchedSymptomSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    weight = serializers.FloatField()
+
+
 class SearchDiseaseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
+    description = serializers.CharField()
+    match_score = serializers.FloatField()
+    symptoms = SearchMatchedSymptomSerializer(many=True)
 
 
 class SearchResponseSerializer(serializers.Serializer):
     diseases = SearchDiseaseSerializer(many=True)
+
+
+class SymptomListSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
 
 
 class EvidenceLevelSerializer(serializers.Serializer):
@@ -25,17 +39,13 @@ class EvidenceLevelSerializer(serializers.Serializer):
     rank = serializers.IntegerField()
 
 
-class RatingSummarySerializer(serializers.Serializer):
-    likes = serializers.IntegerField()
-    dislikes = serializers.IntegerField()
-
-
 class DiseaseRemedySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     short_description = serializers.CharField()
     evidence_level = EvidenceLevelSerializer()
-    rating = RatingSummarySerializer()
+    likes_count = serializers.IntegerField()
+    dislikes_count = serializers.IntegerField()
 
 
 class DiseaseDetailSerializer(serializers.Serializer):
@@ -61,7 +71,8 @@ class RemedyDetailSerializer(serializers.Serializer):
     source = serializers.CharField()
     evidence_level = EvidenceLevelSerializer()
     ingredients = RemedyIngredientSerializer(many=True)
-    rating = RatingSummarySerializer()
+    likes_count = serializers.IntegerField()
+    dislikes_count = serializers.IntegerField()
 
 
 class RemedyRateRequestSerializer(serializers.Serializer):
@@ -77,3 +88,5 @@ class RemedyRateResponseSerializer(serializers.Serializer):
     is_like = serializers.BooleanField()
     comment = serializers.CharField(allow_blank=True)
     created_at = serializers.DateTimeField()
+    likes_count = serializers.IntegerField()
+    dislikes_count = serializers.IntegerField()

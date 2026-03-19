@@ -6,17 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0001_initial'),
+        ("core", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='evidencelevel',
-            options={'ordering': ('-rank', 'code')},
+            name="evidencelevel",
+            options={"ordering": ("-rank", "code")},
         ),
         migrations.AddField(
-            model_name='evidencelevel',
-            name='rank',
+            model_name="evidencelevel",
+            name="rank",
             field=models.IntegerField(default=1),
         ),
     ]

@@ -102,6 +102,8 @@ class Remedy(models.Model):
         on_delete=models.PROTECT,
         related_name="remedies",
     )
+    likes_count = models.IntegerField(default=0)
+    dislikes_count = models.IntegerField(default=0)
     ingredients = models.ManyToManyField(
         Ingredient,
         through="RemedyIngredient",

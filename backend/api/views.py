@@ -1,6 +1,4 @@
-from copy import deepcopy
-
-from django.db import transaction
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
@@ -15,225 +13,48 @@ from api.serializers import (
     RemedyRateResponseSerializer,
     SearchRequestSerializer,
     SearchResponseSerializer,
+    SymptomListSerializer,
 )
-from core.models import Disease, EvidenceLevel, Remedy, UserRating
-
-SEARCH_SAMPLE = {
-    "diseases": [
-        {"id": 1, "name": "Мигрень"},
-        {"id": 2, "name": "Гастрит"},
-        {"id": 3, "name": "ОРВИ"},
-    ]
-}
-
-DISEASE_SAMPLE = {
-    1: {
-        "id": 1,
-        "name": "Мигрень",
-        "description": (
-            "Хроническое неврологическое заболевание " "с приступами головной боли."
-        ),
-        "remedies": [
-            {
-                "id": 1,
-                "name": "Настой мяты",
-                "short_description": (
-                    "Травяной настой для временного облегчения симптомов."
-                ),
-                "evidence_level": {
-                    "id": 1,
-                    "code": "B",
-                    "description": "Умеренный уровень доказательности.",
-                    "color": "#F4B400",
-                    "rank": 7,
-                },
-                "rating": {"likes": 0, "dislikes": 0},
-            },
-            {
-                "id": 2,
-                "name": "Точечный массаж",
-                "short_description": "Немедикаментозный метод расслабления.",
-                "evidence_level": {
-                    "id": 2,
-                    "code": "C",
-                    "description": "Ограниченные доказательства эффективности.",
-                    "color": "#DB4437",
-                    "rank": 5,
-                },
-                "rating": {"likes": 0, "dislikes": 0},
-            },
-        ],
-    },
-    2: {
-        "id": 2,
-        "name": "Гастрит",
-        "description": "Воспаление слизистой оболочки желудка различной этиологии.",
-        "remedies": [
-            {
-                "id": 3,
-                "name": "Отвар ромашки",
-                "short_description": "Щадящий тёплый напиток для поддержки ЖКТ.",
-                "evidence_level": {
-                    "id": 3,
-                    "code": "B",
-                    "description": "Умеренный уровень доказательности.",
-                    "color": "#F4B400",
-                    "rank": 7,
-                },
-                "rating": {"likes": 0, "dislikes": 0},
-            }
-        ],
-    },
-}
-
-REMEDY_SAMPLE = {
-    1: {
-        "id": 1,
-        "disease_id": 1,
-        "name": "Настой мяты",
-        "description": (
-            "Травяной напиток, применяемый в народной практике " "при головной боли."
-        ),
-        "recipe": "1 ст. ложка сухой мяты на 200 мл горячей воды, настоять 10 минут.",
-        "risks": "Не рекомендуется при индивидуальной непереносимости и гипотонии.",
-        "source": "https://example.org/mint-remedy",
-        "evidence_level": {
-            "id": 1,
-            "code": "B",
-            "description": "Умеренный уровень доказательности.",
-            "color": "#F4B400",
-            "rank": 7,
-        },
-        "ingredients": [
-            {"id": 1, "name": "Мята", "amount": "1 столовая ложка"},
-            {"id": 2, "name": "Вода", "amount": "200 мл"},
-        ],
-        "rating": {"likes": 0, "dislikes": 0},
-    },
-    2: {
-        "id": 2,
-        "disease_id": 1,
-        "name": "Точечный массаж",
-        "description": "Метод самомассажа для снижения напряжения.",
-        "recipe": (
-            "Массировать точки у основания черепа " "3-5 минут круговыми движениями."
-        ),
-        "risks": "Избегать при кожных воспалениях в зоне массажа.",
-        "source": "https://example.org/acupressure-remedy",
-        "evidence_level": {
-            "id": 2,
-            "code": "C",
-            "description": "Ограниченные доказательства эффективности.",
-            "color": "#DB4437",
-            "rank": 5,
-        },
-        "ingredients": [],
-        "rating": {"likes": 0, "dislikes": 0},
-    },
-    3: {
-        "id": 3,
-        "disease_id": 2,
-        "name": "Отвар ромашки",
-        "description": "Популярный поддерживающий метод при дискомфорте в желудке.",
-        "recipe": "1 ч. ложка ромашки на 250 мл воды, кипятить 5 минут, остудить.",
-        "risks": "Осторожно при аллергии на растения семейства астровых.",
-        "source": "https://example.org/chamomile-remedy",
-        "evidence_level": {
-            "id": 3,
-            "code": "B",
-            "description": "Умеренный уровень доказательности.",
-            "color": "#F4B400",
-            "rank": 7,
-        },
-        "ingredients": [
-            {"id": 3, "name": "Ромашка", "amount": "1 чайная ложка"},
-            {"id": 2, "name": "Вода", "amount": "250 мл"},
-        ],
-        "rating": {"likes": 0, "dislikes": 0},
-    },
-}
-
-REMEDY_SEED = {
-    1: {
-        "disease_name": "Мигрень",
-        "disease_description": "Хроническое неврологическое заболевание.",
-        "evidence_code": "B",
-        "evidence_description": "Умеренный уровень доказательности.",
-        "evidence_color": "#F4B400",
-        "evidence_rank": 7,
-    },
-    2: {
-        "disease_name": "Мигрень",
-        "disease_description": "Хроническое неврологическое заболевание.",
-        "evidence_code": "C",
-        "evidence_description": "Ограниченные доказательства эффективности.",
-        "evidence_color": "#DB4437",
-        "evidence_rank": 5,
-    },
-    3: {
-        "disease_name": "Гастрит",
-        "disease_description": "Воспаление слизистой желудка.",
-        "evidence_code": "B",
-        "evidence_description": "Умеренный уровень доказательности.",
-        "evidence_color": "#F4B400",
-        "evidence_rank": 7,
-    },
-}
+from core.models import (
+    Disease,
+    DiseaseSymptom,
+    Remedy,
+    RemedyIngredient,
+    Symptom,
+    UserRating,
+)
 
 
-def get_rating_summary(remedy_id: int) -> dict[str, int]:
-    likes = UserRating.objects.filter(remedy_id=remedy_id, is_like=True).count()
-    dislikes = UserRating.objects.filter(remedy_id=remedy_id, is_like=False).count()
-    return {"likes": likes, "dislikes": dislikes}
+def serialize_evidence_level(evidence_level) -> dict:
+    return {
+        "id": evidence_level.id,
+        "code": evidence_level.code,
+        "description": evidence_level.description,
+        "color": evidence_level.color,
+        "rank": evidence_level.rank,
+    }
 
 
-def attach_rating_to_remedies(payload: dict) -> dict:
-    result = deepcopy(payload)
-    for remedy in result.get("remedies", []):
-        remedy["rating"] = get_rating_summary(remedy["id"])
-    return result
+def make_short_description(text: str, max_length: int = 160) -> str:
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 3].rstrip()}..."
 
 
-def attach_rating_to_remedy(payload: dict) -> dict:
-    result = deepcopy(payload)
-    result["rating"] = get_rating_summary(result["id"])
-    return result
+def normalize_symptom_names(raw_symptoms: list[str]) -> list[str]:
+    unique_names: list[str] = []
+    seen: set[str] = set()
 
-
-def resolve_remedy_for_rating(remedy_id: int) -> Remedy | None:
-    existing = Remedy.objects.filter(id=remedy_id).first()
-    if existing:
-        return existing
-
-    remedy_data = REMEDY_SAMPLE.get(remedy_id)
-    seed_data = REMEDY_SEED.get(remedy_id)
-    if not remedy_data or not seed_data:
-        return None
-
-    with transaction.atomic():
-        disease, _ = Disease.objects.get_or_create(
-            name=seed_data["disease_name"],
-            defaults={"description": seed_data["disease_description"]},
-        )
-        evidence_level, _ = EvidenceLevel.objects.get_or_create(
-            code=seed_data["evidence_code"],
-            defaults={
-                "description": seed_data["evidence_description"],
-                "color": seed_data["evidence_color"],
-                "rank": seed_data["evidence_rank"],
-            },
-        )
-        remedy = Remedy.objects.create(
-            id=remedy_id,
-            disease=disease,
-            name=remedy_data["name"],
-            description=remedy_data["description"],
-            recipe=remedy_data["recipe"],
-            risks=remedy_data["risks"],
-            source=remedy_data["source"],
-            evidence_level=evidence_level,
-        )
-    return remedy
+    for raw_name in raw_symptoms:
+        clean_name = raw_name.strip()
+        if not clean_name:
+            continue
+        lookup_key = clean_name.casefold()
+        if lookup_key in seen:
+            continue
+        seen.add(lookup_key)
+        unique_names.append(clean_name)
+    return unique_names
 
 
 class SearchView(APIView):
@@ -243,12 +64,73 @@ class SearchView(APIView):
         responses={status.HTTP_200_OK: SearchResponseSerializer},
     )
     def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
-        serializer = SearchRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        request_serializer = SearchRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
 
-        response_serializer = SearchResponseSerializer(data=SEARCH_SAMPLE)
+        normalized_symptoms = normalize_symptom_names(
+            request_serializer.validated_data["symptoms"]
+        )
+        if not normalized_symptoms:
+            return Response({"diseases": []}, status=status.HTTP_200_OK)
+
+        lookup_query = Q()
+        for symptom_name in normalized_symptoms:
+            lookup_query |= Q(name__iexact=symptom_name)
+
+        matched_symptoms = list(Symptom.objects.filter(lookup_query))
+        if not matched_symptoms:
+            return Response({"diseases": []}, status=status.HTTP_200_OK)
+
+        links = (
+            DiseaseSymptom.objects.select_related("disease", "symptom")
+            .filter(symptom__in=matched_symptoms)
+            .order_by("disease__name", "symptom__name")
+        )
+
+        disease_payloads: dict[int, dict] = {}
+        for link in links:
+            disease_data = disease_payloads.setdefault(
+                link.disease_id,
+                {
+                    "id": link.disease_id,
+                    "name": link.disease.name,
+                    "description": link.disease.description,
+                    "match_score": 0.0,
+                    "symptoms": [],
+                },
+            )
+            disease_data["match_score"] += float(link.weight)
+            disease_data["symptoms"].append(
+                {
+                    "id": link.symptom_id,
+                    "name": link.symptom.name,
+                    "weight": float(link.weight),
+                }
+            )
+
+        diseases = list(disease_payloads.values())
+        for disease in diseases:
+            disease["match_score"] = round(disease["match_score"], 2)
+            disease["symptoms"].sort(key=lambda item: (-item["weight"], item["name"]))
+
+        diseases.sort(key=lambda item: (-item["match_score"], item["name"]))
+
+        response_data = {"diseases": diseases}
+        response_serializer = SearchResponseSerializer(data=response_data)
         response_serializer.is_valid(raise_exception=True)
-        return Response(response_serializer.data)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+class SymptomListView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Список симптомов для автодополнения",
+        responses={status.HTTP_200_OK: SymptomListSerializer(many=True)},
+    )
+    def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        symptoms = list(Symptom.objects.values("id", "name").order_by("name"))
+        serializer = SymptomListSerializer(data=symptoms, many=True)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class DiseaseDetailView(APIView):
@@ -265,21 +147,35 @@ class DiseaseDetailView(APIView):
         ],
         responses={
             status.HTTP_200_OK: DiseaseDetailSerializer,
-            status.HTTP_404_NOT_FOUND: "Disease not found in stub dataset.",
+            status.HTTP_404_NOT_FOUND: "Disease not found.",
         },
     )
     def get(self, request, disease_id, *args, **kwargs):  # noqa: ANN002, ANN003
-        payload = DISEASE_SAMPLE.get(disease_id)
-        if not payload:
-            return Response(
-                {"detail": "Disease not found in stub dataset."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        disease = get_object_or_404(Disease, id=disease_id)
+        remedies = disease.remedies.select_related("evidence_level").order_by(
+            "-evidence_level__rank",
+            "name",
+        )
 
-        payload_with_rating = attach_rating_to_remedies(payload)
-        serializer = DiseaseDetailSerializer(data=payload_with_rating)
+        payload = {
+            "id": disease.id,
+            "name": disease.name,
+            "description": disease.description,
+            "remedies": [
+                {
+                    "id": remedy.id,
+                    "name": remedy.name,
+                    "short_description": make_short_description(remedy.description),
+                    "evidence_level": serialize_evidence_level(remedy.evidence_level),
+                    "likes_count": remedy.likes_count,
+                    "dislikes_count": remedy.dislikes_count,
+                }
+                for remedy in remedies
+            ],
+        }
+        serializer = DiseaseDetailSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class RemedyDetailView(APIView):
@@ -296,21 +192,44 @@ class RemedyDetailView(APIView):
         ],
         responses={
             status.HTTP_200_OK: RemedyDetailSerializer,
-            status.HTTP_404_NOT_FOUND: "Remedy not found in stub dataset.",
+            status.HTTP_404_NOT_FOUND: "Remedy not found.",
         },
     )
     def get(self, request, remedy_id, *args, **kwargs):  # noqa: ANN002, ANN003
-        payload = REMEDY_SAMPLE.get(remedy_id)
-        if not payload:
-            return Response(
-                {"detail": "Remedy not found in stub dataset."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        remedy = get_object_or_404(
+            Remedy.objects.select_related("disease", "evidence_level").prefetch_related(
+                Prefetch(
+                    "remedy_ingredients",
+                    queryset=RemedyIngredient.objects.select_related("ingredient"),
+                )
+            ),
+            id=remedy_id,
+        )
 
-        payload_with_rating = attach_rating_to_remedy(payload)
-        serializer = RemedyDetailSerializer(data=payload_with_rating)
+        payload = {
+            "id": remedy.id,
+            "disease_id": remedy.disease_id,
+            "name": remedy.name,
+            "description": remedy.description,
+            "recipe": remedy.recipe,
+            "risks": remedy.risks,
+            "source": remedy.source,
+            "evidence_level": serialize_evidence_level(remedy.evidence_level),
+            "ingredients": [
+                {
+                    "id": remedy_ingredient.ingredient_id,
+                    "name": remedy_ingredient.ingredient.name,
+                    "amount": remedy_ingredient.amount,
+                }
+                for remedy_ingredient in remedy.remedy_ingredients.all()
+            ],
+            "likes_count": remedy.likes_count,
+            "dislikes_count": remedy.dislikes_count,
+        }
+
+        serializer = RemedyDetailSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class RemedyRateView(APIView):
@@ -336,10 +255,7 @@ class RemedyRateView(APIView):
         serializer = RemedyRateRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        remedy = resolve_remedy_for_rating(remedy_id)
-        if not remedy:
-            remedy = get_object_or_404(Remedy, id=remedy_id)
-
+        remedy = get_object_or_404(Remedy, id=remedy_id)
         rating, created = UserRating.objects.update_or_create(
             user_id=serializer.validated_data["user_id"],
             remedy=remedy,
@@ -348,6 +264,7 @@ class RemedyRateView(APIView):
                 "comment": serializer.validated_data.get("comment") or "",
             },
         )
+        remedy.refresh_from_db(fields=("likes_count", "dislikes_count"))
 
         response_payload = {
             "id": rating.id,
@@ -356,6 +273,8 @@ class RemedyRateView(APIView):
             "is_like": rating.is_like,
             "comment": rating.comment,
             "created_at": rating.created_at,
+            "likes_count": remedy.likes_count,
+            "dislikes_count": remedy.dislikes_count,
         }
         response_serializer = RemedyRateResponseSerializer(data=response_payload)
         response_serializer.is_valid(raise_exception=True)

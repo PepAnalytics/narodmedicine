@@ -14,6 +14,8 @@ class Remedy {
   final EvidenceLevel evidenceLevel;
   final int likesCount;
   final int dislikesCount;
+  final String region;
+  final String? culturalContext;
 
   const Remedy({
     required this.id,
@@ -27,6 +29,8 @@ class Remedy {
     required this.evidenceLevel,
     this.likesCount = 0,
     this.dislikesCount = 0,
+    this.region = 'other',
+    this.culturalContext,
   });
 
   factory Remedy.fromJson(Map<String, dynamic> json) {
@@ -53,6 +57,8 @@ class Remedy {
             ),
       likesCount: json['likes_count'] as int? ?? 0,
       dislikesCount: json['dislikes_count'] as int? ?? 0,
+      region: json['region'] as String? ?? 'other',
+      culturalContext: json['cultural_context'] as String?,
     );
   }
 

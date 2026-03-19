@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import '../models/remedy.dart';
-import '../services/api_service.dart';
-import '../services/user_service.dart';
+import 'package:share_plus/share_plus.dart';
+import '../models/models.dart';
+import '../services/services.dart';
 import '../utils/app_constants.dart';
 import '../widgets/evidence_level_badge.dart';
 
@@ -17,87 +16,63 @@ class RemedyDetailScreen extends StatefulWidget {
 }
 
 class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
-  final FlutterTts _flutterTts = FlutterTts();
-  ApiService? _apiService;
-  UserService? _userService;
-
   Remedy? _remedy;
   bool _isLoading = true;
   String? _error;
 
-  bool _isSpeaking = false;
-  bool? _userRating; // true = like, false = dislike
-  int _likesCount = 0;
-  int _dislikesCount = 0;
-
   @override
   void initState() {
     super.initState();
-    _initTts();
     _loadRemedy();
   }
 
-  Future<void> _initTts() async {
-    await _flutterTts.setLanguage("ru-RU");
-    await _flutterTts.setPitch(1.0);
-    await _flutterTts.setSpeechRate(0.5);
-
-    _flutterTts.setStartHandler(() {
-      setState(() => _isSpeaking = true);
-    });
-
-    _flutterTts.setCompletionHandler(() {
-      setState(() => _isSpeaking = false);
-    });
-
-    _flutterTts.setErrorHandler((message) {
-      setState(() => _isSpeaking = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка озвучки: $message'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _flutterTts.stop();
-    super.dispose();
-  }
-
-  Future<void> _initServices() async {
-    if (_userService == null) {
-      _userService = await UserService.init();
-    }
-    if (_apiService == null) {
-      _apiService = ApiService(
-        baseUrl: AppConstants.apiBaseUrl,
-        getUserId: () async => _userService?.getUserId() ?? '',
-      );
-    }
-  }
-
   Future<void> _loadRemedy() async {
-    await _initServices();
-
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      final apiService = _apiService!;
+      // Загрузка из API или кэша
+      final db = DatabaseService();
+      await db.init();
+
+      final cached = db.getRemedyById(widget.remedyId);
+      if (cached != null) {
+        setState(() {
+          _remedy = Remedy(
+            id: cached.id,
+            name: cached.name,
+            description: cached.description,
+            recipe: cached.recipe,
+            risks: cached.risks,
+            source: cached.source,
+            evidenceLevel: EvidenceLevel(
+              id: cached.evidenceLevelId,
+              code: 'B',
+              description: 'Средний',
+              color: '#FFC107',
+              rank: 2,
+            ),
+            likesCount: cached.likesCount,
+            dislikesCount: cached.dislikesCount,
+            region: cached.region,
+            culturalContext: cached.culturalContext,
+          );
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final apiService = ApiService(
+        baseUrl: AppConstants.apiBaseUrl,
+        getUserId: () async => '',
+      );
       final remedy = await apiService.getRemedy(widget.remedyId);
 
       if (mounted) {
         setState(() {
           _remedy = remedy;
-          _likesCount = remedy.likesCount;
-          _dislikesCount = remedy.dislikesCount;
           _isLoading = false;
         });
       }
@@ -111,114 +86,27 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
     }
   }
 
-  Future<void> _speakRecipe() async {
+  Future<void> _shareRemedy() async {
     if (_remedy == null) return;
 
-    if (_isSpeaking) {
-      await _flutterTts.stop();
-    } else {
-      final textToSpeak =
-          '${_remedy!.name}. ${_remedy!.description}. Рецепт: ${_remedy!.recipe}';
-      await _flutterTts.speak(textToSpeak);
-    }
-  }
+    final shareText =
+        '''
+${_remedy!.name}
 
-  Future<void> _handleRate(bool isLike) async {
-    if (_apiService == null) return;
+${_remedy!.description}
 
-    final newRating = _userRating == true && isLike ? null : isLike;
+📝 Рецепт:
+${_remedy!.recipe}
 
-    try {
-      final result = await _apiService!.rateRemedy(
-        widget.remedyId,
-        isLike,
-        null,
-      );
+🛒 Ингредиенты:
+${_remedy!.ingredients.map((i) => '• ${i.name}${i.amount != null ? ' (${i.amount})' : ''}').join('\n')}
 
-      if (mounted) {
-        setState(() {
-          _userRating = newRating;
-          _likesCount = result['likes_count'] as int;
-          _dislikesCount = result['dislikes_count'] as int;
-        });
+${_remedy!.risks.isNotEmpty ? '⚠️ Риски:\n${_remedy!.risks}' : ''}
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isLike ? 'Спасибо за лайк!' : 'Спасибо за отзыв!'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
+Источник: ${_remedy!.source}
+''';
 
-  Future<void> _showReviewDialog() async {
-    final reviewController = TextEditingController();
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Оставить отзыв'),
-        content: TextField(
-          controller: reviewController,
-          decoration: const InputDecoration(
-            hintText: 'Ваш комментарий',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 4,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Отправить'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true && _apiService != null) {
-      try {
-        await _apiService!.rateRemedy(
-          widget.remedyId,
-          true,
-          reviewController.text,
-        );
-
-        if (mounted) {
-          setState(() {
-            _userRating = true;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Отзыв отправлен!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
+    await Share.share(shareText);
   }
 
   @override
@@ -281,9 +169,9 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(_isSpeaking ? Icons.stop : Icons.volume_up),
-            onPressed: _speakRecipe,
-            tooltip: _isSpeaking ? 'Остановить' : 'Озвучить',
+            icon: const Icon(Icons.share),
+            onPressed: _shareRemedy,
+            tooltip: 'Поделиться',
           ),
         ],
       ),
@@ -310,31 +198,11 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Счётчики лайков/дизлайков
-            Row(
-              children: [
-                Icon(Icons.thumb_up_outlined, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  '$_likesCount',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Icon(Icons.thumb_down_outlined, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  '$_dislikesCount',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+            // Регион и культурный контекст
+            if (remedy.region.isNotEmpty || remedy.culturalContext != null) ...[
+              _buildRegionCard(context, remedy),
+              const SizedBox(height: 16),
+            ],
 
             // Описание
             _buildSectionCard(
@@ -362,49 +230,7 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
 
             // Ингредиенты
             if (remedy.ingredients.isNotEmpty) ...[
-              _buildSectionCard(
-                context,
-                title: 'Ингредиенты',
-                icon: Icons.shopping_basket_outlined,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: remedy.ingredients.map((ingredient) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.check_circle_outline, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              ingredient.name,
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                          ),
-                          if (ingredient.amount != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primaryContainer,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                ingredient.amount!,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
+              _buildIngredientsCard(context, remedy),
               const SizedBox(height: 16),
             ],
 
@@ -450,41 +276,139 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
               ),
             ),
             const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // Кнопки действий
+  Widget _buildRegionCard(BuildContext context, Remedy remedy) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Лайк
-                _buildActionButton(
-                  context,
-                  icon: _userRating == true
-                      ? Icons.thumb_up
-                      : Icons.thumb_up_outlined,
-                  label: 'Лайк',
-                  onPressed: () => _handleRate(true),
-                  isActive: _userRating == true,
+                Text(
+                  _getRegionEmoji(remedy.region),
+                  style: const TextStyle(fontSize: 24),
                 ),
-                // Дизлайк
-                _buildActionButton(
-                  context,
-                  icon: _userRating == false
-                      ? Icons.thumb_down
-                      : Icons.thumb_down_outlined,
-                  label: 'Дизлайк',
-                  onPressed: () => _handleRate(false),
-                  isActive: _userRating == false,
-                ),
-                // Отзыв
-                _buildActionButton(
-                  context,
-                  icon: Icons.rate_review,
-                  label: 'Отзыв',
-                  onPressed: _showReviewDialog,
+                const SizedBox(width: 8),
+                Text(
+                  _getRegionName(remedy.region),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 32),
+            if (remedy.culturalContext != null &&
+                remedy.culturalContext!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                remedy.culturalContext!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIngredientsCard(BuildContext context, Remedy remedy) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.shopping_basket_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Ингредиенты',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...remedy.ingredients.map((ingredient) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            ingredient.name,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                        ),
+                        if (ingredient.amount != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              ingredient.amount!,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                      ],
+                    ),
+                    // Альтернативные названия
+                    if (ingredient.alternativeNames != null &&
+                        ingredient.alternativeNames!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 26),
+                        child: Wrap(
+                          spacing: 6,
+                          children: ingredient.alternativeNames!.entries.map((
+                            entry,
+                          ) {
+                            return Chip(
+                              label: Text(
+                                '${entry.key}: ${entry.value}',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.surfaceVariant,
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }).toList(),
           ],
         ),
       ),
@@ -527,39 +451,41 @@ class _RemedyDetailScreenState extends State<RemedyDetailScreen> {
     );
   }
 
-  Widget _buildActionButton(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    bool isActive = false,
-  }) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: isActive
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-              size: 28,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isActive
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  String _getRegionName(String region) {
+    switch (region.toLowerCase()) {
+      case 'arab':
+        return 'Арабский';
+      case 'persian':
+        return 'Персидский';
+      case 'caucasian':
+        return 'Кавказский';
+      case 'turkic':
+        return 'Тюркский';
+      case 'chinese':
+        return 'Китайский';
+      case 'indian':
+        return 'Индийский (Аюрведа)';
+      default:
+        return 'Другой';
+    }
+  }
+
+  String _getRegionEmoji(String region) {
+    switch (region.toLowerCase()) {
+      case 'arab':
+        return '🇸🇦';
+      case 'persian':
+        return '🇮🇷';
+      case 'caucasian':
+        return '🏔️';
+      case 'turkic':
+        return '🇹🇷';
+      case 'chinese':
+        return '🇨🇳';
+      case 'indian':
+        return '🇮🇳';
+      default:
+        return '🌍';
+    }
   }
 }

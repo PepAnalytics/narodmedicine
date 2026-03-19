@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
-import '../services/api_service.dart';
-import '../services/user_service.dart';
+import '../services/services.dart';
 import '../utils/app_constants.dart';
 import '../widgets/remedy_card.dart';
 
-/// Экран деталей заболевания
+/// Экран деталей заболевания с фильтрацией по регионам
 class DiseaseDetailScreen extends StatefulWidget {
   final Disease disease;
 
@@ -18,8 +17,23 @@ class DiseaseDetailScreen extends StatefulWidget {
 class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
   ApiService? _apiService;
   UserService? _userService;
+  List<RemedyBrief> _allRemedies = [];
+  List<RemedyBrief> _filteredRemedies = [];
+  String? _selectedRegion;
   bool _isLoading = true;
   String? _error;
+
+  // Список регионов для фильтрации
+  final List<MapEntry<String, String>> _regions = [
+    const MapEntry('all', 'Все'),
+    const MapEntry('arab', 'Арабский'),
+    const MapEntry('persian', 'Персидский'),
+    const MapEntry('caucasian', 'Кавказский'),
+    const MapEntry('turkic', 'Тюркский'),
+    const MapEntry('chinese', 'Китайский'),
+    const MapEntry('indian', 'Индийский'),
+    const MapEntry('other', 'Другой'),
+  ];
 
   @override
   void initState() {
@@ -51,7 +65,7 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
 
     try {
       final apiService = _getApiService();
-      await apiService.getDisease(widget.disease.id);
+      final disease = await apiService.getDisease(widget.disease.id);
 
       if (mounted) {
         setState(() {
@@ -68,38 +82,33 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
     }
   }
 
+  void _filterRemedies() {
+    if (_selectedRegion == null || _selectedRegion == 'all') {
+      setState(() => _filteredRemedies = _allRemedies);
+    } else {
+      setState(() {
+        _filteredRemedies = _allRemedies
+            .where((r) => r.evidenceLevel.code.toLowerCase() == _selectedRegion)
+            .toList();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Для Sprint 1 используем моковые данные, но с реальной структурой
-    // В следующем спринте заменим на реальные данные из API
+    // Для Sprint 4 используем моковые данные с регионами
     final mockRemedies = [
       RemedyBrief(
         id: 1,
         name: 'Чай с медом и лимоном',
         shortDescription: 'Классическое народное средство при простуде.',
-        evidenceLevel: widget.disease.id == 1
-            ? const EvidenceLevel(
-                id: 1,
-                code: 'B',
-                description: 'Средний',
-                color: '#FFC107',
-                rank: 2,
-              )
-            : widget.disease.id == 2
-            ? const EvidenceLevel(
-                id: 2,
-                code: 'A',
-                description: 'Высокий',
-                color: '#4CAF50',
-                rank: 1,
-              )
-            : const EvidenceLevel(
-                id: 3,
-                code: 'C',
-                description: 'Низкий',
-                color: '#F44336',
-                rank: 3,
-              ),
+        evidenceLevel: const EvidenceLevel(
+          id: 1,
+          code: 'B',
+          description: 'Средний',
+          color: '#FFC107',
+          rank: 2,
+        ),
         likesCount: 42,
         dislikesCount: 5,
       ),
@@ -119,17 +128,32 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
       ),
       RemedyBrief(
         id: 3,
-        name: 'Компресс из капусты',
-        shortDescription: 'Народное средство при кашле и бронхите.',
+        name: 'Аюрведический чай Тулси',
+        shortDescription: 'Индийское средство для укрепления иммунитета.',
         evidenceLevel: const EvidenceLevel(
           id: 3,
-          code: 'C',
-          description: 'Низкий',
+          code: 'indian',
+          description: 'Индийский',
+          color: '#FF9800',
+          rank: 2,
+        ),
+        likesCount: 28,
+        dislikesCount: 2,
+      ),
+      RemedyBrief(
+        id: 4,
+        name: 'Китайский травяной сбор',
+        shortDescription:
+            'Традиционная китайская медицина для лечения простуды.',
+        evidenceLevel: const EvidenceLevel(
+          id: 4,
+          code: 'chinese',
+          description: 'Китайский',
           color: '#F44336',
           rank: 3,
         ),
-        likesCount: 15,
-        dislikesCount: 8,
+        likesCount: 22,
+        dislikesCount: 4,
       ),
     ];
 
@@ -222,7 +246,7 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
                     ),
                     const SizedBox(height: 24),
                   ],
-                  // Методы лечения
+                  // Фильтр по регионам
                   Text(
                     'Методы лечения',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -230,6 +254,33 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // Чипсы для фильтрации по регионам
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _regions.map((region) {
+                        final isSelected = _selectedRegion == region.key;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(region.value),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                _selectedRegion = selected ? region.key : null;
+                                _filterRemedies();
+                              });
+                            },
+                            avatar: region.key != 'all' && region.key != 'all'
+                                ? Text(_getRegionEmoji(region.key))
+                                : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Список методов
                   ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -254,5 +305,24 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
               ),
             ),
     );
+  }
+
+  String _getRegionEmoji(String region) {
+    switch (region) {
+      case 'arab':
+        return '🇸🇦';
+      case 'persian':
+        return '🇮🇷';
+      case 'caucasian':
+        return '🏔️';
+      case 'turkic':
+        return '🇹🇷';
+      case 'chinese':
+        return '🇨🇳';
+      case 'indian':
+        return '🇮🇳';
+      default:
+        return '🌍';
+    }
   }
 }

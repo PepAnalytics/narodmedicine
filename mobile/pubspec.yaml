@@ -64,6 +64,12 @@ dependencies:
   firebase_core: ^2.24.2
   firebase_messaging: ^14.7.9
   firebase_analytics: ^10.8.0
+  
+  # Кнопка "Поделиться"
+  share_plus: ^7.2.1
+  
+  # Информация о версии приложения
+  package_info_plus: ^5.0.1
 
 dev_dependencies:
   flutter_test:

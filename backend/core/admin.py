@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from core.models import (
+    DeviceRegistration,
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
@@ -100,3 +101,18 @@ class ViewHistoryAdmin(admin.ModelAdmin):
     search_fields = ("user_id", "remedy__name")
     list_filter = ("viewed_at",)
     readonly_fields = ("viewed_at",)
+
+
+@admin.register(DeviceRegistration)
+class DeviceRegistrationAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user_id",
+        "platform",
+        "is_active",
+        "created_at",
+        "last_seen_at",
+    )
+    search_fields = ("user_id", "fcm_token")
+    list_filter = ("platform", "is_active", "created_at")
+    readonly_fields = ("created_at", "updated_at", "last_seen_at")

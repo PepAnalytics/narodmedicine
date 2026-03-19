@@ -116,6 +116,9 @@ class FavoriteItemSerializer(serializers.Serializer):
 
 
 class FavoriteListResponseSerializer(serializers.Serializer):
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    total = serializers.IntegerField()
     favorites = FavoriteItemSerializer(many=True)
 
 
@@ -147,3 +150,81 @@ class SyncResponseSerializer(serializers.Serializer):
     symptoms = SymptomListSerializer(many=True)
     diseases = BasicDiseaseSerializer(many=True)
     evidence_levels = EvidenceLevelSerializer(many=True)
+
+
+class PushSubscribeRequestSerializer(serializers.Serializer):
+    user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    fcm_token = serializers.CharField(max_length=512)
+    platform = serializers.ChoiceField(
+        choices=("android", "ios", "web", "other"),
+        required=False,
+        default="other",
+    )
+
+
+class PushDeviceSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_id = serializers.CharField()
+    fcm_token = serializers.CharField()
+    platform = serializers.CharField()
+    is_active = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+    last_seen_at = serializers.DateTimeField()
+
+
+class PushUnsubscribeRequestSerializer(serializers.Serializer):
+    user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    fcm_token = serializers.CharField(max_length=512)
+
+
+class PushUnsubscribeResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+class PushNotifyRequestSerializer(serializers.Serializer):
+    user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    title = serializers.CharField(max_length=120)
+    body = serializers.CharField(max_length=1024)
+    data = serializers.DictField(
+        child=serializers.CharField(),
+        required=False,
+        default=dict,
+    )
+    tokens = serializers.ListField(
+        child=serializers.CharField(max_length=512),
+        required=False,
+        allow_empty=False,
+    )
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("user_id"):
+            return attrs
+        if attrs.get("tokens"):
+            return attrs
+        request = self.context.get("request")
+        if request is not None:
+            for candidate in (
+                request.headers.get("X-User-Id"),
+                request.query_params.get("user_id"),
+            ):
+                if candidate and str(candidate).strip():
+                    return attrs
+        raise serializers.ValidationError(
+            "Provide user_id or explicit tokens list for delivery.",
+        )
+
+
+class PushNotifyResultSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    status = serializers.CharField()
+    message_id = serializers.CharField(required=False, allow_blank=True)
+    error = serializers.CharField(required=False, allow_blank=True)
+
+
+class PushNotifyResponseSerializer(serializers.Serializer):
+    requested = serializers.IntegerField()
+    sent = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    results = PushNotifyResultSerializer(many=True)

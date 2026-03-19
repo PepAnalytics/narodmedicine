@@ -3,12 +3,14 @@ from django.urls import path
 from api.views import (
     AnalyticsEventView,
     DiseaseDetailView,
-    PopularDiseaseListView,
     FavoriteDeleteView,
     FavoriteListCreateView,
+    HealthView,
     HistoryListCreateView,
     PrivacyPolicyView,
+    PopularDiseaseListView,
     PushNotifyView,
+    ReadinessView,
     PushSubscribeView,
     PushUnsubscribeView,
     RemedyDetailView,
@@ -22,6 +24,8 @@ from api.views import (
 )
 
 urlpatterns = [
+    path("health/", HealthView.as_view(), name="health"),
+    path("health/ready/", ReadinessView.as_view(), name="health-ready"),
     path("sync/", SyncView.as_view(), name="sync"),
     path("symptoms/", SymptomListView.as_view(), name="symptom-list"),
     path("search/", SearchView.as_view(), name="search"),

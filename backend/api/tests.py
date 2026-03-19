@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
@@ -642,3 +643,36 @@ class PushApiTests(BaseApiDataMixin, APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error"]["code"], "validation_error")
+
+
+class OperationsApiTests(APITestCase):
+    def test_health_returns_service_metadata(self) -> None:
+        response = self.client.get(reverse("health"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "ok")
+        self.assertIn("service", response.data)
+        self.assertIn("version", response.data)
+        self.assertIn("timestamp", response.data)
+
+    def test_readiness_returns_database_and_cache_checks(self) -> None:
+        response = self.client.get(reverse("health-ready"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "ok")
+        self.assertEqual(response.data["checks"]["database"]["status"], "ok")
+        self.assertEqual(response.data["checks"]["cache"]["status"], "ok")
+
+    @override_settings(CORS_ALLOW_ALL_ORIGINS=True)
+    def test_cors_preflight_responds_with_expected_headers(self) -> None:
+        response = self.client.options(
+            reverse("popular-disease-list"),
+            HTTP_ORIGIN="https://app.example.com",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="GET",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="Content-Type,X-User-Id",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Access-Control-Allow-Origin"], "*")
+        self.assertIn("GET", response["Access-Control-Allow-Methods"])
+        self.assertIn("X-User-Id", response["Access-Control-Allow-Headers"])

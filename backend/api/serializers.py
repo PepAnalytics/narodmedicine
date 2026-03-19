@@ -183,6 +183,21 @@ class PopularDiseaseListResponseSerializer(serializers.Serializer):
     diseases = PopularDiseaseSerializer(many=True)
 
 
+class HealthResponseSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    service = serializers.CharField()
+    version = serializers.CharField()
+    timestamp = serializers.DateTimeField()
+
+
+class ReadinessResponseSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    service = serializers.CharField()
+    version = serializers.CharField()
+    timestamp = serializers.DateTimeField()
+    checks = serializers.JSONField()
+
+
 class PushSubscribeRequestSerializer(serializers.Serializer):
     user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
     fcm_token = serializers.CharField(max_length=512)

@@ -180,6 +180,13 @@ class Remedy(models.Model):
 
     class Meta:
         ordering = ("name",)
+        indexes = [
+            models.Index(fields=("region",), name="remedy_region_idx"),
+            models.Index(
+                fields=("disease", "region"),
+                name="remedy_disease_region_idx",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -250,6 +257,12 @@ class Favorite(models.Model):
             models.UniqueConstraint(
                 fields=("user_id", "remedy"),
                 name="unique_user_favorite_remedy",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=("user_id", "-created_at"),
+                name="favorite_user_created_idx",
             )
         ]
 

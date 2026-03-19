@@ -1,0 +1,103 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# iOS/macOS
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Coverage
+coverage/
+
+# Exceptions to above rules.
+!**/ios/**/default.mode1v3
+!**/ios/**/default.mode2v3
+!**/ios/**/default.pbxuser
+!**/ios/**/default.perspectivev3
+!/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+!**/ios/**/default xcworkspace.xcworkspace/contents.xcworkspacedata
+!**/ios/**/default.xcworkspacedata
+!**/ios/**/default.xccheckout
+!**/ios/**/default.plist
+!**/ios/**/default.xcscheme
+!**/ios/**/default.xcscmblueprint
+!**/ios/**/default.xcsettings
+!**/ios/**/default.xcuserstate
+!**/ios/**/default.xcuserstate.xcuserstate
+!**/ios/**/default.xcworkspace/contents.xcworkspacedata
+!**/ios/**/default.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+!**/ios/**/default.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+!**/ios/**/default.xcworkspace/xcuserdata/
+!**/ios/**/default.xcworkspace/contents.xcworkspacedata
+!**/ios/**/default.xcworkspace/xcshareddata/
+!**/ios/**/default.xcworkspace/xcuserdata/
+
+# Android Gradle
+android/.gradle/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/*.iml

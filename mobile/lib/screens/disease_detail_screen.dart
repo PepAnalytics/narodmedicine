@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../theme/app_design_tokens.dart';
+import '../widgets/widgets.dart';
 import '../models/models.dart';
-import '../services/services.dart';
-import '../utils/app_constants.dart';
-import '../widgets/remedy_card.dart';
 
 /// Экран деталей заболевания с фильтрацией по регионам
 class DiseaseDetailScreen extends StatefulWidget {
@@ -15,15 +16,11 @@ class DiseaseDetailScreen extends StatefulWidget {
 }
 
 class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
-  ApiService? _apiService;
-  UserService? _userService;
-  List<RemedyBrief> _allRemedies = [];
-  List<RemedyBrief> _filteredRemedies = [];
   String? _selectedRegion;
-  bool _isLoading = true;
+  List<RemedyBrief> _remedies = [];
+  bool _isLoading = false;
   String? _error;
 
-  // Список регионов для фильтрации
   final List<MapEntry<String, String>> _regions = [
     const MapEntry('all', 'Все'),
     const MapEntry('arab', 'Арабский'),
@@ -38,23 +35,7 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _initServices();
-  }
-
-  Future<void> _initServices() async {
-    _userService = await UserService.init();
-    setState(() {});
     _loadRemedies();
-  }
-
-  ApiService _getApiService() {
-    if (_apiService == null) {
-      _apiService = ApiService(
-        baseUrl: AppConstants.apiBaseUrl,
-        getUserId: () async => _userService?.getUserId() ?? '',
-      );
-    }
-    return _apiService!;
   }
 
   Future<void> _loadRemedies() async {
@@ -64,99 +45,38 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
     });
 
     try {
-      final apiService = _getApiService();
-      final disease = await apiService.getDisease(widget.disease.id);
+      final url = _selectedRegion == null || _selectedRegion == 'all'
+          ? 'http://10.0.2.2:8000/api/diseases/${widget.disease.id}/'
+          : 'http://10.0.2.2:8000/api/diseases/${widget.disease.id}/?region=$_selectedRegion';
 
-      if (mounted) {
+      final response = await http.get(
+        Uri.parse(url),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        final List<dynamic> remediesJson = jsonData['remedies'] as List<dynamic>;
+
         setState(() {
+          _remedies = remediesJson.map((json) => RemedyBrief.fromJson(json)).toList();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Ошибка загрузки: ${response.statusCode}';
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  void _filterRemedies() {
-    if (_selectedRegion == null || _selectedRegion == 'all') {
-      setState(() => _filteredRemedies = _allRemedies);
-    } else {
       setState(() {
-        _filteredRemedies = _allRemedies
-            .where((r) => r.evidenceLevel.code.toLowerCase() == _selectedRegion)
-            .toList();
+        _error = e.toString();
+        _isLoading = false;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Для Sprint 4 используем моковые данные с регионами
-    final mockRemedies = [
-      RemedyBrief(
-        id: 1,
-        name: 'Чай с медом и лимоном',
-        shortDescription: 'Классическое народное средство при простуде.',
-        evidenceLevel: const EvidenceLevel(
-          id: 1,
-          code: 'B',
-          description: 'Средний',
-          color: '#FFC107',
-          rank: 2,
-        ),
-        likesCount: 42,
-        dislikesCount: 5,
-      ),
-      RemedyBrief(
-        id: 2,
-        name: 'Ингаляция с эвкалиптом',
-        shortDescription: 'Помогает при заложенности носа и кашле.',
-        evidenceLevel: const EvidenceLevel(
-          id: 2,
-          code: 'A',
-          description: 'Высокий',
-          color: '#4CAF50',
-          rank: 1,
-        ),
-        likesCount: 38,
-        dislikesCount: 3,
-      ),
-      RemedyBrief(
-        id: 3,
-        name: 'Аюрведический чай Тулси',
-        shortDescription: 'Индийское средство для укрепления иммунитета.',
-        evidenceLevel: const EvidenceLevel(
-          id: 3,
-          code: 'indian',
-          description: 'Индийский',
-          color: '#FF9800',
-          rank: 2,
-        ),
-        likesCount: 28,
-        dislikesCount: 2,
-      ),
-      RemedyBrief(
-        id: 4,
-        name: 'Китайский травяной сбор',
-        shortDescription:
-            'Традиционная китайская медицина для лечения простуды.',
-        evidenceLevel: const EvidenceLevel(
-          id: 4,
-          code: 'chinese',
-          description: 'Китайский',
-          color: '#F44336',
-          rank: 3,
-        ),
-        likesCount: 22,
-        dislikesCount: 4,
-      ),
-    ];
-
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.disease.name),
@@ -165,149 +85,181 @@ class _DiseaseDetailScreenState extends State<DiseaseDetailScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 64,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Ошибка загрузки',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _error!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _loadRemedies,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Повторить'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(AppDesignTokens.spacingMD),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Описание болезни
                   Text(
-                    'Описание',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
                     widget.disease.description,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    style: const TextStyle(
+                      fontSize: AppDesignTokens.fontSizeBody,
+                      color: AppDesignTokens.textSecondary,
+                      height: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppDesignTokens.spacingLG),
+
                   // Симптомы
                   if (widget.disease.symptoms.isNotEmpty) ...[
-                    Text(
+                    const Text(
                       'Симптомы',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                      style: TextStyle(
+                        fontSize: AppDesignTokens.fontSizeH3,
+                        fontWeight: AppDesignTokens.fontWeightBold,
+                        color: AppDesignTokens.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppDesignTokens.spacingSM),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: AppDesignTokens.spacingSM,
+                      runSpacing: AppDesignTokens.spacingSM,
                       children: widget.disease.symptoms.map((symptom) {
-                        return Chip(
-                          label: Text(symptom.name),
-                          avatar: const Icon(
-                            Icons.local_fire_department,
-                            size: 18,
-                          ),
+                        return AppChip(
+                          label: symptom.name,
+                          icon: Icons.local_fire_department_outlined,
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppDesignTokens.spacingLG),
                   ],
+
                   // Фильтр по регионам
-                  Text(
-                    'Методы лечения',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
+                  const Text(
+                    'Регион',
+                    style: TextStyle(
+                      fontSize: AppDesignTokens.fontSizeH3,
+                      fontWeight: AppDesignTokens.fontWeightBold,
+                      color: AppDesignTokens.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  // Чипсы для фильтрации по регионам
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _regions.map((region) {
+                  const SizedBox(height: AppDesignTokens.spacingSM),
+                  SizedBox(
+                    height: AppDesignTokens.chipHeight + 8,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _regions.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: AppDesignTokens.spacingSM),
+                      itemBuilder: (context, index) {
+                        final region = _regions[index];
                         final isSelected = _selectedRegion == region.key;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(region.value),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              setState(() {
-                                _selectedRegion = selected ? region.key : null;
-                                _filterRemedies();
-                              });
-                            },
-                            avatar: region.key != 'all' && region.key != 'all'
-                                ? Text(_getRegionEmoji(region.key))
-                                : null,
-                          ),
+                        return AppRegionChip(
+                          label: region.value,
+                          emoji: _getRegionEmoji(region.key),
+                          isSelected: isSelected,
+                          onTap: () {
+                            setState(() {
+                              _selectedRegion = region.key == 'all' ? null : region.key;
+                            });
+                            _loadRemedies();
+                          },
                         );
-                      }).toList(),
+                      },
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  // Список методов
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: mockRemedies.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final remedy = mockRemedies[index];
-                      return RemedyCard(
-                        remedy: remedy,
-                        onTap: () {
-                          Navigator.pushNamed(
-                            context,
-                            AppConstants.remedyDetailRoute,
-                            arguments: remedy.id,
-                          );
-                        },
-                      );
-                    },
+                  const SizedBox(height: AppDesignTokens.spacingLG),
+
+                  // Методы лечения
+                  const Text(
+                    'Методы лечения',
+                    style: TextStyle(
+                      fontSize: AppDesignTokens.fontSizeH2,
+                      fontWeight: AppDesignTokens.fontWeightBold,
+                      color: AppDesignTokens.textPrimary,
+                    ),
                   ),
+                  const SizedBox(height: AppDesignTokens.spacingSM),
                 ],
               ),
             ),
+          ),
+
+          // Список методов
+          _isLoading
+              ? const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : _error != null
+                  ? SliverFillRemaining(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: AppDesignTokens.danger,
+                                size: 64,
+                              ),
+                              const SizedBox(height: AppDesignTokens.spacingMD),
+                              Text(
+                                _error!,
+                                style: const TextStyle(
+                                  color: AppDesignTokens.textSecondary,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: AppDesignTokens.spacingLG),
+                              AppButton(
+                                text: 'Повторить',
+                                onPressed: _loadRemedies,
+                                type: AppButtonType.outline,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  : _remedies.isEmpty
+                      ? const SliverFillRemaining(
+                          child: Center(
+                            child: Text(
+                              'Методы не найдены',
+                              style: TextStyle(color: AppDesignTokens.textMuted),
+                            ),
+                          ),
+                        )
+                      : SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final remedy = _remedies[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppDesignTokens.spacingMD,
+                                  vertical: AppDesignTokens.spacingXS,
+                                ),
+                                child: AppRemedyCard(
+                                  remedy: remedy,
+                                  onTap: () {
+                                    Navigator.pushNamed(
+                                      context,
+                                      '/remedy',
+                                      arguments: remedy.id,
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                            childCount: _remedies.length,
+                          ),
+                        ),
+
+          // Отступ снизу
+          const SliverToBoxAdapter(
+            child: SizedBox(height: AppDesignTokens.spacingXL),
+          ),
+        ],
+      ),
     );
   }
 
-  String _getRegionEmoji(String region) {
+  String _getRegionEmoji(String? region) {
+    if (region == null) return '';
     switch (region) {
       case 'arab':
         return '🇸🇦';

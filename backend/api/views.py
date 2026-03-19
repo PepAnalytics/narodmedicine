@@ -1,6 +1,9 @@
-from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
-from django.db.models.functions import Lower, StrIndex
+from django.conf import settings
+from django.core.cache import cache
+from django.db.models import Case, IntegerField, Prefetch, Q, Sum, Value, When
+from django.db.models.functions import Coalesce, Lower, StrIndex
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
@@ -10,6 +13,8 @@ from rest_framework.views import APIView
 
 from api.push_service import PushConfigurationError, send_push_notifications
 from api.serializers import (
+    AnalyticsEventRequestSerializer,
+    AnalyticsEventResponseSerializer,
     DiseaseDetailSerializer,
     FavoriteCreateSerializer,
     FavoriteItemSerializer,
@@ -17,30 +22,48 @@ from api.serializers import (
     HistoryCreateResponseSerializer,
     HistoryCreateSerializer,
     HistoryListResponseSerializer,
-    RemedyFullSerializer,
-    RemedyListResponseSerializer,
-    RemedyRateRequestSerializer,
-    RemedyRateResponseSerializer,
+    LegalDocumentSerializer,
+    PopularDiseaseListResponseSerializer,
     PushDeviceSerializer,
     PushNotifyRequestSerializer,
     PushNotifyResponseSerializer,
     PushSubscribeRequestSerializer,
     PushUnsubscribeRequestSerializer,
     PushUnsubscribeResponseSerializer,
+    RemedyFullSerializer,
+    RemedyListResponseSerializer,
+    RemedyRateRequestSerializer,
+    RemedyRateResponseSerializer,
     SearchRequestSerializer,
     SearchResponseSerializer,
     SymptomListSerializer,
     SyncResponseSerializer,
+    UserConsentRequestSerializer,
+    UserConsentResponseSerializer,
+)
+from core.cache_utils import (
+    CATALOG_CACHE_NAMESPACE,
+    LEGAL_CACHE_NAMESPACE,
+    build_versioned_cache_key,
+    get_catalog_cache_timeout,
+    get_legal_cache_timeout,
 )
 from core.models import (
+    AnalyticsEvent,
     DeviceRegistration,
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
     Favorite,
+    LegalDocumentTypeChoices,
+    PrivacyPolicy,
+    RegionChoices,
     Remedy,
     RemedyIngredient,
+    Source,
     Symptom,
+    TermsOfService,
+    UserConsent,
     UserRating,
     ViewHistory,
 )
@@ -82,6 +105,17 @@ PAGE_SIZE_QUERY_PARAM = openapi.Parameter(
     openapi.IN_QUERY,
     description="Размер страницы (по умолчанию 20, максимум 100).",
     type=openapi.TYPE_INTEGER,
+    required=False,
+)
+
+REGION_QUERY_PARAM = openapi.Parameter(
+    "region",
+    openapi.IN_QUERY,
+    description=(
+        "Фильтр по региону метода: arab, persian, caucasian, turkic, "
+        "chinese, indian, other."
+    ),
+    type=openapi.TYPE_STRING,
     required=False,
 )
 
@@ -153,6 +187,25 @@ def parse_evidence_codes(raw_codes: str | None) -> list[str]:
     return codes
 
 
+def parse_region(raw_region: str | None) -> str | None:
+    if raw_region is None:
+        return None
+    region = raw_region.strip().lower()
+    if not region:
+        return None
+    allowed_regions = {choice[0] for choice in RegionChoices.choices}
+    if region not in allowed_regions:
+        raise ValidationError(
+            {
+                "region": (
+                    "Unsupported region. Expected one of: "
+                    f"{', '.join(sorted(allowed_regions))}."
+                )
+            }
+        )
+    return region
+
+
 def parse_positive_int(
     raw_value: str | None,
     *,
@@ -174,7 +227,11 @@ def parse_positive_int(
 
 
 def get_remedy_queryset():
-    return Remedy.objects.select_related("disease", "evidence_level").prefetch_related(
+    return Remedy.objects.select_related(
+        "disease",
+        "evidence_level",
+        "source_record",
+    ).prefetch_related(
         Prefetch(
             "remedy_ingredients",
             queryset=RemedyIngredient.objects.select_related("ingredient").order_by(
@@ -182,6 +239,21 @@ def get_remedy_queryset():
             ),
         )
     )
+
+
+def serialize_source_record(source_record: Source | None) -> dict | None:
+    if source_record is None:
+        return None
+    return {
+        "id": source_record.id,
+        "title": source_record.title,
+        "author": source_record.author,
+        "year": source_record.year,
+        "region": source_record.region,
+        "source_type": source_record.source_type,
+        "url": source_record.url,
+        "reference": source_record.reference,
+    }
 
 
 def serialize_remedy(remedy: Remedy) -> dict:
@@ -193,12 +265,16 @@ def serialize_remedy(remedy: Remedy) -> dict:
         "recipe": remedy.recipe,
         "risks": remedy.risks,
         "source": remedy.source,
+        "source_record": serialize_source_record(remedy.source_record),
+        "region": remedy.region,
+        "cultural_context": remedy.cultural_context,
         "evidence_level": serialize_evidence_level(remedy.evidence_level),
         "ingredients": [
             {
                 "id": remedy_ingredient.ingredient_id,
                 "name": remedy_ingredient.ingredient.name,
                 "amount": remedy_ingredient.amount,
+                "alternative_names": remedy_ingredient.ingredient.alternative_names,
             }
             for remedy_ingredient in remedy.remedy_ingredients.all()
         ],
@@ -220,21 +296,60 @@ def serialize_device(device: DeviceRegistration) -> dict:
     }
 
 
+def serialize_legal_document(document, document_type: str) -> dict:  # noqa: ANN001
+    return {
+        "document_type": document_type,
+        "version": document.version,
+        "content": document.content,
+        "effective_from": document.effective_from,
+        "created_at": document.created_at,
+    }
+
+
+def get_current_document(model_class):  # noqa: ANN001, ANN202
+    document = (
+        model_class.objects.filter(effective_from__lte=timezone.now())
+        .order_by("-effective_from", "-created_at")
+        .first()
+    )
+    if document is not None:
+        return document
+
+    document = model_class.objects.order_by("-effective_from", "-created_at").first()
+    if document is not None:
+        return document
+    raise NotFound("Requested document is not available.")
+
+
 class SearchView(APIView):
     @swagger_auto_schema(
         operation_summary="Поиск болезней по симптомам",
+        manual_parameters=[REGION_QUERY_PARAM],
         request_body=SearchRequestSerializer,
         responses={status.HTTP_200_OK: SearchResponseSerializer},
     )
     def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
         request_serializer = SearchRequestSerializer(data=request.data)
         request_serializer.is_valid(raise_exception=True)
+        region = parse_region(request.query_params.get("region"))
 
         normalized_symptoms = normalize_symptom_names(
             request_serializer.validated_data["symptoms"]
         )
         if not normalized_symptoms:
             return Response({"diseases": []}, status=status.HTTP_200_OK)
+
+        cache_key = build_versioned_cache_key(
+            CATALOG_CACHE_NAMESPACE,
+            "search",
+            {
+                "symptoms": normalized_symptoms,
+                "region": region,
+            },
+        )
+        cached_response = cache.get(cache_key)
+        if cached_response is not None:
+            return Response(cached_response, status=status.HTTP_200_OK)
 
         lookup_query = Q()
         for symptom_name in normalized_symptoms:
@@ -244,11 +359,17 @@ class SearchView(APIView):
         if not matched_symptoms:
             return Response({"diseases": []}, status=status.HTTP_200_OK)
 
-        links = (
+        links_queryset = (
             DiseaseSymptom.objects.select_related("disease", "symptom")
             .filter(symptom__in=matched_symptoms)
             .order_by("disease__name", "symptom__name")
         )
+        if region:
+            eligible_disease_ids = Disease.objects.filter(
+                remedies__region=region
+            ).values_list("id", flat=True)
+            links_queryset = links_queryset.filter(disease_id__in=eligible_disease_ids)
+        links = links_queryset.distinct()
 
         disease_payloads: dict[int, dict] = {}
         for link in links:
@@ -281,6 +402,11 @@ class SearchView(APIView):
         response_data = {"diseases": diseases}
         response_serializer = SearchResponseSerializer(data=response_data)
         response_serializer.is_valid(raise_exception=True)
+        cache.set(
+            cache_key,
+            response_serializer.data,
+            timeout=get_catalog_cache_timeout(),
+        )
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
@@ -300,6 +426,15 @@ class SymptomListView(APIView):
     )
     def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
         query = request.query_params.get("q", "").strip()
+        cache_key = build_versioned_cache_key(
+            CATALOG_CACHE_NAMESPACE,
+            "symptom-list",
+            {"query": query.casefold()},
+        )
+        cached_response = cache.get(cache_key)
+        if cached_response is not None:
+            return Response(cached_response, status=status.HTTP_200_OK)
+
         symptoms_queryset = Symptom.objects.all()
 
         if query:
@@ -323,6 +458,7 @@ class SymptomListView(APIView):
         symptoms = list(symptoms_queryset.values("id", "name"))
         serializer = SymptomListSerializer(data=symptoms, many=True)
         serializer.is_valid(raise_exception=True)
+        cache.set(cache_key, serializer.data, timeout=get_catalog_cache_timeout())
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -338,6 +474,7 @@ class DiseaseDetailView(APIView):
                 required=True,
             ),
             EVIDENCE_LEVEL_QUERY_PARAM,
+            REGION_QUERY_PARAM,
         ],
         responses={
             status.HTTP_200_OK: DiseaseDetailSerializer,
@@ -349,10 +486,13 @@ class DiseaseDetailView(APIView):
         evidence_codes = parse_evidence_codes(
             request.query_params.get("evidence_level")
         )
+        region = parse_region(request.query_params.get("region"))
 
         remedies = disease.remedies.select_related("evidence_level")
         if evidence_codes:
             remedies = remedies.filter(evidence_level__code__in=evidence_codes)
+        if region:
+            remedies = remedies.filter(region=region)
         remedies = remedies.order_by("-evidence_level__rank", "name")
 
         payload = {
@@ -364,6 +504,7 @@ class DiseaseDetailView(APIView):
                     "id": remedy.id,
                     "name": remedy.name,
                     "short_description": make_short_description(remedy.description),
+                    "region": remedy.region,
                     "evidence_level": serialize_evidence_level(remedy.evidence_level),
                     "likes_count": remedy.likes_count,
                     "dislikes_count": remedy.dislikes_count,
@@ -381,6 +522,7 @@ class RemedyListView(APIView):
         operation_summary="Список методов лечения",
         manual_parameters=[
             EVIDENCE_LEVEL_QUERY_PARAM,
+            REGION_QUERY_PARAM,
             openapi.Parameter(
                 "disease_id",
                 openapi.IN_QUERY,
@@ -399,6 +541,9 @@ class RemedyListView(APIView):
         )
         if evidence_codes:
             remedies = remedies.filter(evidence_level__code__in=evidence_codes)
+        region = parse_region(request.query_params.get("region"))
+        if region:
+            remedies = remedies.filter(region=region)
 
         disease_id = request.query_params.get("disease_id")
         if disease_id:
@@ -706,6 +851,19 @@ class SyncView(APIView):
         responses={status.HTTP_200_OK: SyncResponseSerializer},
     )
     def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        cache_key = build_versioned_cache_key(
+            CATALOG_CACHE_NAMESPACE,
+            "sync",
+            {"scope": "full"},
+        )
+        cached_response = cache.get(cache_key)
+        if cached_response is not None:
+            response = Response(cached_response, status=status.HTTP_200_OK)
+            response["Cache-Control"] = (
+                "public, max-age=3600, stale-while-revalidate=86400"
+            )
+            return response
+
         payload = {
             "symptoms": list(Symptom.objects.values("id", "name").order_by("name")),
             "diseases": list(Disease.objects.values("id", "name").order_by("name")),
@@ -721,10 +879,200 @@ class SyncView(APIView):
         }
         serializer = SyncResponseSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
+        cache.set(
+            cache_key,
+            serializer.data,
+            timeout=get_catalog_cache_timeout(),
+        )
 
         response = Response(serializer.data, status=status.HTTP_200_OK)
         response["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
         return response
+
+
+class PopularDiseaseListView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Список популярных болезней",
+        manual_parameters=[
+            openapi.Parameter(
+                "limit",
+                openapi.IN_QUERY,
+                description=(
+                    "Количество болезней в ответе " "(по умолчанию 10, максимум 50)."
+                ),
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            )
+        ],
+        responses={status.HTTP_200_OK: PopularDiseaseListResponseSerializer},
+    )
+    def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        limit = parse_positive_int(
+            request.query_params.get("limit"),
+            field_name="limit",
+            default=settings.POPULAR_DISEASES_LIMIT,
+            max_value=50,
+        )
+        cache_key = build_versioned_cache_key(
+            CATALOG_CACHE_NAMESPACE,
+            "popular-diseases",
+            {"limit": limit},
+        )
+        cached_response = cache.get(cache_key)
+        if cached_response is not None:
+            return Response(cached_response, status=status.HTTP_200_OK)
+
+        diseases = Disease.objects.annotate(
+            popularity_score=Coalesce(Sum("remedies__likes_count"), 0)
+            + Coalesce(Sum("remedies__dislikes_count"), 0)
+        ).order_by("-popularity_score", "name")[:limit]
+        payload = {
+            "diseases": [
+                {
+                    "id": disease.id,
+                    "name": disease.name,
+                    "description": disease.description,
+                    "popularity_score": int(disease.popularity_score or 0),
+                }
+                for disease in diseases
+            ]
+        }
+        serializer = PopularDiseaseListResponseSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        cache.set(
+            cache_key,
+            serializer.data,
+            timeout=get_catalog_cache_timeout(),
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TermsOfServiceView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Актуальная версия пользовательского соглашения",
+        responses={status.HTTP_200_OK: LegalDocumentSerializer},
+    )
+    def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        cache_key = build_versioned_cache_key(
+            LEGAL_CACHE_NAMESPACE,
+            "terms-of-service",
+            {"scope": "current"},
+        )
+        cached_response = cache.get(cache_key)
+        if cached_response is not None:
+            return Response(cached_response, status=status.HTTP_200_OK)
+
+        document = get_current_document(TermsOfService)
+        payload = serialize_legal_document(
+            document,
+            LegalDocumentTypeChoices.TERMS_OF_SERVICE,
+        )
+        serializer = LegalDocumentSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        cache.set(cache_key, serializer.data, timeout=get_legal_cache_timeout())
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PrivacyPolicyView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Актуальная версия политики конфиденциальности",
+        responses={status.HTTP_200_OK: LegalDocumentSerializer},
+    )
+    def get(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        cache_key = build_versioned_cache_key(
+            LEGAL_CACHE_NAMESPACE,
+            "privacy-policy",
+            {"scope": "current"},
+        )
+        cached_response = cache.get(cache_key)
+        if cached_response is not None:
+            return Response(cached_response, status=status.HTTP_200_OK)
+
+        document = get_current_document(PrivacyPolicy)
+        payload = serialize_legal_document(
+            document,
+            LegalDocumentTypeChoices.PRIVACY_POLICY,
+        )
+        serializer = LegalDocumentSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        cache.set(cache_key, serializer.data, timeout=get_legal_cache_timeout())
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserConsentView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Зафиксировать согласие пользователя с версией документа",
+        manual_parameters=[USER_ID_HEADER_PARAM],
+        request_body=UserConsentRequestSerializer,
+        responses={
+            status.HTTP_201_CREATED: UserConsentResponseSerializer,
+            status.HTTP_200_OK: UserConsentResponseSerializer,
+        },
+    )
+    def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        serializer = UserConsentRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_id = resolve_user_id(
+            request,
+            fallback=serializer.validated_data.get("user_id"),
+        )
+        document_type = serializer.validated_data["document_type"]
+        version = serializer.validated_data["version"]
+
+        if document_type == LegalDocumentTypeChoices.TERMS_OF_SERVICE:
+            get_object_or_404(TermsOfService, version=version)
+        else:
+            get_object_or_404(PrivacyPolicy, version=version)
+
+        consent, created = UserConsent.objects.get_or_create(
+            user_id=user_id,
+            document_type=document_type,
+            version=version,
+        )
+        payload = {
+            "id": consent.id,
+            "user_id": consent.user_id,
+            "document_type": consent.document_type,
+            "version": consent.version,
+            "timestamp": consent.timestamp,
+        }
+        response_serializer = UserConsentResponseSerializer(data=payload)
+        response_serializer.is_valid(raise_exception=True)
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(response_serializer.data, status=response_status)
+
+
+class AnalyticsEventView(APIView):
+    @swagger_auto_schema(
+        operation_summary="Приём аналитических событий с клиента",
+        manual_parameters=[USER_ID_HEADER_PARAM],
+        request_body=AnalyticsEventRequestSerializer,
+        responses={status.HTTP_201_CREATED: AnalyticsEventResponseSerializer},
+    )
+    def post(self, request, *args, **kwargs):  # noqa: ANN002, ANN003
+        serializer = AnalyticsEventRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_id = serializer.validated_data.get("user_id")
+        if not user_id:
+            user_id = request.headers.get("X-User-Id", "").strip()
+
+        event = AnalyticsEvent.objects.create(
+            user_id=user_id or "",
+            event_type=serializer.validated_data["event_type"],
+            metadata=serializer.validated_data.get("metadata", {}),
+        )
+        payload = {
+            "id": event.id,
+            "user_id": event.user_id,
+            "event_type": event.event_type,
+            "metadata": event.metadata,
+            "timestamp": event.timestamp,
+        }
+        response_serializer = AnalyticsEventResponseSerializer(data=payload)
+        response_serializer.is_valid(raise_exception=True)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class PushSubscribeView(APIView):

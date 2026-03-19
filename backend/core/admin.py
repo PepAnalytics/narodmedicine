@@ -1,15 +1,20 @@
 from django.contrib import admin
 
 from core.models import (
+    AnalyticsEvent,
     DeviceRegistration,
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
     Favorite,
     Ingredient,
+    PrivacyPolicy,
+    Source,
     Remedy,
     RemedyIngredient,
     Symptom,
+    TermsOfService,
+    UserConsent,
     UserRating,
     ViewHistory,
 )
@@ -51,6 +56,13 @@ class EvidenceLevelAdmin(admin.ModelAdmin):
     list_filter = ("rank",)
 
 
+@admin.register(Source)
+class SourceAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "author", "year", "region", "source_type")
+    search_fields = ("title", "author", "reference", "url")
+    list_filter = ("region", "source_type", "year")
+
+
 class RemedyIngredientInline(admin.TabularInline):
     model = RemedyIngredient
     extra = 1
@@ -63,12 +75,20 @@ class RemedyAdmin(admin.ModelAdmin):
         "id",
         "name",
         "disease",
+        "region",
         "evidence_level",
         "likes_count",
         "dislikes_count",
     )
-    search_fields = ("name", "description", "recipe", "disease__name")
-    list_filter = ("evidence_level", "disease")
+    search_fields = (
+        "name",
+        "description",
+        "recipe",
+        "cultural_context",
+        "disease__name",
+        "source_record__title",
+    )
+    list_filter = ("region", "evidence_level", "disease")
     inlines = (RemedyIngredientInline,)
 
 
@@ -116,3 +136,35 @@ class DeviceRegistrationAdmin(admin.ModelAdmin):
     search_fields = ("user_id", "fcm_token")
     list_filter = ("platform", "is_active", "created_at")
     readonly_fields = ("created_at", "updated_at", "last_seen_at")
+
+
+@admin.register(TermsOfService)
+class TermsOfServiceAdmin(admin.ModelAdmin):
+    list_display = ("id", "version", "effective_from", "created_at")
+    search_fields = ("version", "content")
+    list_filter = ("effective_from", "created_at")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(PrivacyPolicy)
+class PrivacyPolicyAdmin(admin.ModelAdmin):
+    list_display = ("id", "version", "effective_from", "created_at")
+    search_fields = ("version", "content")
+    list_filter = ("effective_from", "created_at")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(UserConsent)
+class UserConsentAdmin(admin.ModelAdmin):
+    list_display = ("id", "user_id", "document_type", "version", "timestamp")
+    search_fields = ("user_id", "version")
+    list_filter = ("document_type", "timestamp")
+    readonly_fields = ("timestamp",)
+
+
+@admin.register(AnalyticsEvent)
+class AnalyticsEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "user_id", "event_type", "timestamp")
+    search_fields = ("user_id", "event_type")
+    list_filter = ("event_type", "timestamp")
+    readonly_fields = ("timestamp",)

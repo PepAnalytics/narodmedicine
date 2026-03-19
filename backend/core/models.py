@@ -2,6 +2,30 @@ from django.core.validators import RegexValidator
 from django.db import models
 
 
+class RegionChoices(models.TextChoices):
+    ARAB = "arab", "Arab"
+    PERSIAN = "persian", "Persian"
+    CAUCASIAN = "caucasian", "Caucasian"
+    TURKIC = "turkic", "Turkic"
+    CHINESE = "chinese", "Chinese"
+    INDIAN = "indian", "Indian"
+    OTHER = "other", "Other"
+
+
+class SourceTypeChoices(models.TextChoices):
+    BOOK = "book", "Book"
+    WEBSITE = "website", "Website"
+    TREATISE = "treatise", "Treatise"
+    ARTICLE = "article", "Article"
+    ETHNOGRAPHY = "ethnography", "Ethnography"
+    ARCHIVE = "archive", "Archive"
+
+
+class LegalDocumentTypeChoices(models.TextChoices):
+    TERMS_OF_SERVICE = "terms_of_service", "Terms of Service"
+    PRIVACY_POLICY = "privacy_policy", "Privacy Policy"
+
+
 class Symptom(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
@@ -59,6 +83,7 @@ class Ingredient(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField()
     contraindications = models.TextField(blank=True)
+    alternative_names = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ("name",)
@@ -86,6 +111,36 @@ class EvidenceLevel(models.Model):
         return self.code
 
 
+class Source(models.Model):
+    title = models.CharField(max_length=255)
+    author = models.CharField(max_length=255, blank=True)
+    year = models.IntegerField(null=True, blank=True)
+    region = models.CharField(
+        max_length=32,
+        choices=RegionChoices.choices,
+        default=RegionChoices.OTHER,
+    )
+    source_type = models.CharField(
+        max_length=32,
+        choices=SourceTypeChoices.choices,
+        default=SourceTypeChoices.BOOK,
+    )
+    url = models.URLField(max_length=1024, blank=True)
+    reference = models.CharField(max_length=1024, blank=True)
+
+    class Meta:
+        ordering = ("title", "author")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("title", "author", "year"),
+                name="unique_source_record",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.title
+
+
 class Remedy(models.Model):
     disease = models.ForeignKey(
         Disease,
@@ -97,11 +152,24 @@ class Remedy(models.Model):
     recipe = models.TextField()
     risks = models.TextField(blank=True)
     source = models.URLField(max_length=1024, blank=True)
+    source_record = models.ForeignKey(
+        Source,
+        on_delete=models.SET_NULL,
+        related_name="remedies",
+        null=True,
+        blank=True,
+    )
     evidence_level = models.ForeignKey(
         EvidenceLevel,
         on_delete=models.PROTECT,
         related_name="remedies",
     )
+    region = models.CharField(
+        max_length=32,
+        choices=RegionChoices.choices,
+        default=RegionChoices.OTHER,
+    )
+    cultural_context = models.TextField(blank=True)
     likes_count = models.IntegerField(default=0)
     dislikes_count = models.IntegerField(default=0)
     ingredients = models.ManyToManyField(
@@ -240,3 +308,82 @@ class DeviceRegistration(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id} [{self.platform}] active={self.is_active}"
+
+
+class TermsOfService(models.Model):
+    version = models.CharField(max_length=32)
+    content = models.TextField()
+    effective_from = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-effective_from", "-created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("version",),
+                name="unique_terms_version",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Terms v{self.version}"
+
+
+class PrivacyPolicy(models.Model):
+    version = models.CharField(max_length=32)
+    content = models.TextField()
+    effective_from = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-effective_from", "-created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("version",),
+                name="unique_privacy_version",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Privacy v{self.version}"
+
+
+class UserConsent(models.Model):
+    user_id = models.CharField(max_length=128)
+    document_type = models.CharField(
+        max_length=32,
+        choices=LegalDocumentTypeChoices.choices,
+    )
+    version = models.CharField(max_length=32)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-timestamp",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user_id", "document_type", "version"),
+                name="unique_user_document_consent",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}: {self.document_type} {self.version}"
+
+
+class AnalyticsEvent(models.Model):
+    user_id = models.CharField(max_length=128, blank=True)
+    event_type = models.CharField(max_length=128)
+    metadata = models.JSONField(default=dict, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-timestamp",)
+        indexes = [
+            models.Index(
+                fields=("event_type", "-timestamp"), name="analytics_event_idx"
+            ),
+            models.Index(fields=("user_id", "-timestamp"), name="analytics_user_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} @ {self.timestamp.isoformat()}"

@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Case, IntegerField, Prefetch, Q, Sum, Value, When
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, Value, When
 from django.db.models.functions import Coalesce, Lower, StrIndex
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -321,6 +321,33 @@ def get_current_document(model_class):  # noqa: ANN001, ANN202
     raise NotFound("Requested document is not available.")
 
 
+def serialize_disease_preview(
+    disease: Disease,
+    *,
+    match_score: float | None = None,
+    matched_symptoms: list[dict] | None = None,
+    popularity_score: int | None = None,
+    remedies_count: int | None = None,
+) -> dict:
+    short_description = make_short_description(disease.description or "")
+    payload = {
+        "id": disease.id,
+        "name": disease.name,
+        "description": short_description,
+        "short_description": short_description,
+    }
+    if match_score is not None:
+        payload["match_score"] = match_score
+    if matched_symptoms is not None:
+        payload["symptoms"] = matched_symptoms
+        payload["matched_symptoms"] = matched_symptoms
+    if popularity_score is not None:
+        payload["popularity_score"] = popularity_score
+    if remedies_count is not None:
+        payload["remedies_count"] = remedies_count
+    return payload
+
+
 class SearchView(APIView):
     @swagger_auto_schema(
         operation_summary="Поиск болезней по симптомам",
@@ -376,9 +403,7 @@ class SearchView(APIView):
             disease_data = disease_payloads.setdefault(
                 link.disease_id,
                 {
-                    "id": link.disease_id,
-                    "name": link.disease.name,
-                    "description": link.disease.description,
+                    "disease": link.disease,
                     "match_score": 0.0,
                     "symptoms": [],
                 },
@@ -397,9 +422,17 @@ class SearchView(APIView):
             disease["match_score"] = round(disease["match_score"], 2)
             disease["symptoms"].sort(key=lambda item: (-item["weight"], item["name"]))
 
-        diseases.sort(key=lambda item: (-item["match_score"], item["name"]))
+        diseases.sort(key=lambda item: (-item["match_score"], item["disease"].name))
+        disease_items = [
+            serialize_disease_preview(
+                disease=item["disease"],
+                match_score=item["match_score"],
+                matched_symptoms=item["symptoms"],
+            )
+            for item in diseases
+        ]
 
-        response_data = {"diseases": diseases}
+        response_data = {"diseases": disease_items}
         response_serializer = SearchResponseSerializer(data=response_data)
         response_serializer.is_valid(raise_exception=True)
         cache.set(
@@ -924,16 +957,16 @@ class PopularDiseaseListView(APIView):
 
         diseases = Disease.objects.annotate(
             popularity_score=Coalesce(Sum("remedies__likes_count"), 0)
-            + Coalesce(Sum("remedies__dislikes_count"), 0)
+            + Coalesce(Sum("remedies__dislikes_count"), 0),
+            remedies_count=Count("remedies", distinct=True),
         ).order_by("-popularity_score", "name")[:limit]
         payload = {
             "diseases": [
-                {
-                    "id": disease.id,
-                    "name": disease.name,
-                    "description": disease.description,
-                    "popularity_score": int(disease.popularity_score or 0),
-                }
+                serialize_disease_preview(
+                    disease=disease,
+                    popularity_score=int(disease.popularity_score or 0),
+                    remedies_count=int(disease.remedies_count or 0),
+                )
                 for disease in diseases
             ]
         }

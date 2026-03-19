@@ -18,8 +18,10 @@ class SearchDiseaseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     description = serializers.CharField()
+    short_description = serializers.CharField()
     match_score = serializers.FloatField()
     symptoms = SearchMatchedSymptomSerializer(many=True)
+    matched_symptoms = SearchMatchedSymptomSerializer(many=True)
 
 
 class SearchResponseSerializer(serializers.Serializer):
@@ -172,6 +174,8 @@ class PopularDiseaseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     description = serializers.CharField()
+    short_description = serializers.CharField()
+    remedies_count = serializers.IntegerField()
     popularity_score = serializers.IntegerField()
 
 

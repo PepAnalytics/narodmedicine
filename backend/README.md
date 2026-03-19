@@ -291,3 +291,8 @@ curl -X POST http://localhost:8000/api/push/notify/ \
 - Добавлены модели `Source`, `TermsOfService`, `PrivacyPolicy`, `UserConsent`, `AnalyticsEvent`
 - Redis-кеширование используется для `/api/symptoms/`, `/api/search/`, `/api/diseases/popular/`, `/api/sync/`, а также актуальных юридических документов
 - Инвалидация кеша выполняется автоматически через сигналы при изменениях из админки и доменных событий
+
+## Sprint 5 Prep
+
+- `POST /api/search/` дополнительно возвращает `short_description` и alias `matched_symptoms` для UI-карточек, сохраняя исходное поле `symptoms`
+- `GET /api/diseases/popular/` дополнительно возвращает `short_description` и `remedies_count`, а поле `description` уже нормализовано под короткий карточный текст

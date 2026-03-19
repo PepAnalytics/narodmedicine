@@ -166,6 +166,8 @@ class SearchApiTests(BaseApiDataMixin, APITestCase):
         self.assertEqual(len(diseases), 2)
         self.assertEqual(diseases[0]["name"], "Грипп")
         self.assertEqual(diseases[0]["match_score"], 3.0)
+        self.assertEqual(diseases[0]["description"], diseases[0]["short_description"])
+        self.assertEqual(diseases[0]["symptoms"], diseases[0]["matched_symptoms"])
         self.assertEqual(diseases[1]["name"], "Мигрень")
         self.assertEqual(diseases[1]["match_score"], 2.5)
 
@@ -451,6 +453,11 @@ class PopularDiseaseApiTests(BaseApiDataMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["diseases"]), 1)
         self.assertEqual(response.data["diseases"][0]["name"], "Мигрень")
+        self.assertEqual(
+            response.data["diseases"][0]["description"],
+            response.data["diseases"][0]["short_description"],
+        )
+        self.assertGreaterEqual(response.data["diseases"][0]["remedies_count"], 1)
 
 
 class LegalApiTests(APITestCase):

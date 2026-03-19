@@ -1,4 +1,4 @@
-# Folk Medicine Backend (Sprint 3)
+# Folk Medicine Backend (Sprint 4)
 
 Бэкенд MVP для мобильного справочника по народной медицине.
 
@@ -48,7 +48,7 @@ docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
 ```
 
-5. Загрузите стартовые данные Sprint 1:
+5. Загрузите стартовые данные и расширенный региональный каталог:
 
 ```bash
 docker compose exec backend python manage.py load_initial_data
@@ -58,6 +58,16 @@ docker compose exec backend python manage.py load_initial_data
 
 ```bash
 docker compose exec backend python manage.py load_initial_data --reset
+```
+
+Отдельный импорт только регионального контента:
+
+```bash
+docker compose exec backend python manage.py load_regional_content
+```
+
+```bash
+docker compose exec backend python manage.py load_regional_content --reset
 ```
 
 ## URL
@@ -80,6 +90,9 @@ docker compose exec backend python manage.py load_initial_data --reset
 - `REDIS_URL` — URL подключения к Redis
 - `FCM_CREDENTIALS_PATH` — путь до Firebase service account JSON
 - `FCM_PROJECT_ID` — ID Firebase проекта (опционально)
+- `CATALOG_CACHE_TTL` — TTL для каталогов, поиска, `/sync/`, популярных болезней
+- `LEGAL_CACHE_TTL` — TTL для юридических документов
+- `POPULAR_DISEASES_LIMIT` — лимит по умолчанию для `/api/diseases/popular/`
 
 ## Линтинг и pre-commit
 
@@ -102,12 +115,13 @@ black --config backend/pyproject.toml backend
 flake8 --config backend/.flake8 backend
 ```
 
-## API (Sprint 3)
+## API (Sprint 4)
 
 - `GET /api/symptoms/` (поддерживает нечёткий поиск: `?q=...`)
-- `POST /api/search/`
-- `GET /api/diseases/{id}/`
-- `GET /api/remedies/`
+- `POST /api/search/` (поддерживает фильтр `?region=arab`)
+- `GET /api/diseases/popular/`
+- `GET /api/diseases/{id}/` (поддерживает `?evidence_level=A,B` и `?region=arab`)
+- `GET /api/remedies/` (поддерживает `?evidence_level=A&disease_id=1&region=arab`)
 - `GET /api/remedies/{id}/`
 - `POST /api/remedies/{id}/rate/`
 - `POST /api/favorites/`
@@ -116,6 +130,10 @@ flake8 --config backend/.flake8 backend
 - `POST /api/history/`
 - `GET /api/history/`
 - `GET /api/sync/`
+- `GET /api/legal/terms/`
+- `GET /api/legal/privacy/`
+- `POST /api/legal/consents/`
+- `POST /api/analytics/`
 - `POST /api/push/subscribe/`
 - `POST /api/push/unsubscribe/`
 - `POST /api/push/notify/`
@@ -151,11 +169,21 @@ curl -X POST http://localhost:8000/api/search/ \
 ```
 
 ```bash
-curl "http://localhost:8000/api/diseases/1/?evidence_level=A,B"
+curl -X POST "http://localhost:8000/api/search/?region=arab" \
+  -H "Content-Type: application/json" \
+  -d '{"symptoms":["головная боль","тошнота"]}'
 ```
 
 ```bash
-curl "http://localhost:8000/api/remedies/?evidence_level=A&disease_id=1"
+curl "http://localhost:8000/api/diseases/popular/?limit=5"
+```
+
+```bash
+curl "http://localhost:8000/api/diseases/1/?evidence_level=A,B&region=arab"
+```
+
+```bash
+curl "http://localhost:8000/api/remedies/?evidence_level=A&disease_id=1&region=arab"
 ```
 
 ```bash
@@ -201,6 +229,28 @@ curl -i http://localhost:8000/api/sync/
 ```
 
 ```bash
+curl http://localhost:8000/api/legal/terms/
+```
+
+```bash
+curl http://localhost:8000/api/legal/privacy/
+```
+
+```bash
+curl -X POST http://localhost:8000/api/legal/consents/ \
+  -H "X-User-Id: some-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{"document_type":"terms_of_service","version":"1.0"}'
+```
+
+```bash
+curl -X POST http://localhost:8000/api/analytics/ \
+  -H "X-User-Id: some-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{"event_type":"screen_view","metadata":{"screen":"search_results"}}'
+```
+
+```bash
 curl -X POST http://localhost:8000/api/push/subscribe/ \
   -H "X-User-Id: some-uuid" \
   -H "Content-Type: application/json" \
@@ -228,5 +278,16 @@ curl -X POST http://localhost:8000/api/push/notify/ \
 - 50 болезней
 - 100 симптомов
 - 100 ингредиентов
-- 200 методов лечения (по 4 на каждую болезнь)
+- 200 базовых методов лечения (по 4 на каждую болезнь)
+- 180 региональных методов лечения (по 30 на каждый регион: arab, persian, caucasian, turkic, chinese, indian)
+- 12 структурированных источников по регионам
+- стартовые версии `TermsOfService` и `PrivacyPolicy`
 - связи болезнь-симптом с весами `weight`
+
+## Sprint 4
+
+- `Remedy` расширен полями `region`, `cultural_context`, `source_record`
+- `Ingredient` поддерживает `alternative_names` через `JSONField`
+- Добавлены модели `Source`, `TermsOfService`, `PrivacyPolicy`, `UserConsent`, `AnalyticsEvent`
+- Redis-кеширование используется для `/api/symptoms/`, `/api/search/`, `/api/diseases/popular/`, `/api/sync/`, а также актуальных юридических документов
+- Инвалидация кеша выполняется автоматически через сигналы при изменениях из админки и доменных событий

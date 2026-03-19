@@ -4,18 +4,28 @@ import random
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import slugify
 
 from core.models import (
+    AnalyticsEvent,
+    DeviceRegistration,
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
     Ingredient,
+    PrivacyPolicy,
     Remedy,
     RemedyIngredient,
+    Source,
     Symptom,
+    TermsOfService,
+    UserConsent,
     UserRating,
+    Favorite,
+    ViewHistory,
 )
+from core.services.regional_importer import RegionalContentImporter
 
 EVIDENCE_LEVELS = [
     {
@@ -53,6 +63,18 @@ EVIDENCE_LEVELS = [
         "rank": 1,
     },
 ]
+
+DEFAULT_TERMS_CONTENT = """
+Используя сервис, пользователь подтверждает, что сведения в приложении носят
+информационный характер, не заменяют очную консультацию врача и требуют
+критической клинической оценки перед практическим применением.
+""".strip()
+
+DEFAULT_PRIVACY_CONTENT = """
+Сервис хранит технические идентификаторы пользователя, события аналитики,
+историю действий и сведения о согласиях только в объеме, необходимом для
+работы приложения, диагностики и соблюдения юридических требований.
+""".strip()
 
 DISEASE_DATA = [
     (
@@ -427,9 +449,17 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:  # noqa: ANN002, ANN003
         if options["reset"]:
             self.stdout.write("Удаление существующих доменных данных...")
+            AnalyticsEvent.objects.all().delete()
+            UserConsent.objects.all().delete()
+            PrivacyPolicy.objects.all().delete()
+            TermsOfService.objects.all().delete()
+            DeviceRegistration.objects.all().delete()
+            Favorite.objects.all().delete()
+            ViewHistory.objects.all().delete()
             UserRating.objects.all().delete()
             RemedyIngredient.objects.all().delete()
             Remedy.objects.all().delete()
+            Source.objects.all().delete()
             DiseaseSymptom.objects.all().delete()
             Disease.objects.all().delete()
             Symptom.objects.all().delete()
@@ -442,6 +472,8 @@ class Command(BaseCommand):
         diseases = self._load_diseases()
         self._link_diseases_and_symptoms(diseases, symptoms)
         self._load_remedies(diseases, ingredients, evidence_map)
+        self._load_legal_documents()
+        RegionalContentImporter().import_dataset(reset=False)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -449,7 +481,8 @@ class Command(BaseCommand):
                 f"{Disease.objects.count()} болезней, "
                 f"{Symptom.objects.count()} симптомов, "
                 f"{Ingredient.objects.count()} ингредиентов, "
-                f"{Remedy.objects.count()} методов."
+                f"{Remedy.objects.count()} методов, "
+                f"{Source.objects.count()} источников."
             )
         )
 
@@ -493,6 +526,7 @@ class Command(BaseCommand):
                         "Индивидуальная непереносимость, склонность к аллергическим "
                         "реакциям, беременность или лактация без консультации врача."
                     ),
+                    "alternative_names": {},
                 },
             )
             ingredient_objects.append(ingredient)
@@ -569,7 +603,13 @@ class Command(BaseCommand):
                         "recipe": variant["recipe"],
                         "risks": variant["risks"],
                         "source": self._build_source_url(disease.name, variant_index),
+                        "source_record": None,
                         "evidence_level": evidence_level,
+                        "region": "other",
+                        "cultural_context": (
+                            "Базовый демонстрационный метод без выраженной "
+                            "региональной привязки."
+                        ),
                     },
                 )
 
@@ -586,3 +626,21 @@ class Command(BaseCommand):
     def _build_source_url(disease_name: str, variant_index: int) -> str:
         disease_slug = slugify(disease_name, allow_unicode=True)
         return f"https://example.org/folk/{disease_slug}-{variant_index + 1}"
+
+    @staticmethod
+    def _load_legal_documents() -> None:
+        effective_from = timezone.now()
+        TermsOfService.objects.update_or_create(
+            version="1.0",
+            defaults={
+                "content": DEFAULT_TERMS_CONTENT,
+                "effective_from": effective_from,
+            },
+        )
+        PrivacyPolicy.objects.update_or_create(
+            version="1.0",
+            defaults={
+                "content": DEFAULT_PRIVACY_CONTENT,
+                "effective_from": effective_from,
+            },
+        )

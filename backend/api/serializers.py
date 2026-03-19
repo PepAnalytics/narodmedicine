@@ -36,6 +36,17 @@ class BasicDiseaseSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
+class SourceRecordSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    author = serializers.CharField(allow_blank=True)
+    year = serializers.IntegerField(allow_null=True)
+    region = serializers.CharField()
+    source_type = serializers.CharField()
+    url = serializers.CharField(allow_blank=True)
+    reference = serializers.CharField(allow_blank=True)
+
+
 class EvidenceLevelSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     code = serializers.CharField()
@@ -48,6 +59,7 @@ class DiseaseRemedySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     short_description = serializers.CharField()
+    region = serializers.CharField()
     evidence_level = EvidenceLevelSerializer()
     likes_count = serializers.IntegerField()
     dislikes_count = serializers.IntegerField()
@@ -64,6 +76,7 @@ class RemedyIngredientSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     amount = serializers.CharField()
+    alternative_names = serializers.JSONField()
 
 
 class RemedyFullSerializer(serializers.Serializer):
@@ -74,6 +87,9 @@ class RemedyFullSerializer(serializers.Serializer):
     recipe = serializers.CharField()
     risks = serializers.CharField()
     source = serializers.CharField()
+    source_record = SourceRecordSerializer(allow_null=True)
+    region = serializers.CharField()
+    cultural_context = serializers.CharField()
     evidence_level = EvidenceLevelSerializer()
     ingredients = RemedyIngredientSerializer(many=True)
     likes_count = serializers.IntegerField()
@@ -152,6 +168,17 @@ class SyncResponseSerializer(serializers.Serializer):
     evidence_levels = EvidenceLevelSerializer(many=True)
 
 
+class PopularDiseaseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    popularity_score = serializers.IntegerField()
+
+
+class PopularDiseaseListResponseSerializer(serializers.Serializer):
+    diseases = PopularDiseaseSerializer(many=True)
+
+
 class PushSubscribeRequestSerializer(serializers.Serializer):
     user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
     fcm_token = serializers.CharField(max_length=512)
@@ -228,3 +255,41 @@ class PushNotifyResponseSerializer(serializers.Serializer):
     sent = serializers.IntegerField()
     failed = serializers.IntegerField()
     results = PushNotifyResultSerializer(many=True)
+
+
+class LegalDocumentSerializer(serializers.Serializer):
+    document_type = serializers.CharField()
+    version = serializers.CharField()
+    content = serializers.CharField()
+    effective_from = serializers.DateTimeField()
+    created_at = serializers.DateTimeField()
+
+
+class UserConsentRequestSerializer(serializers.Serializer):
+    user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    document_type = serializers.ChoiceField(
+        choices=("terms_of_service", "privacy_policy")
+    )
+    version = serializers.CharField(max_length=32)
+
+
+class UserConsentResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_id = serializers.CharField()
+    document_type = serializers.CharField()
+    version = serializers.CharField()
+    timestamp = serializers.DateTimeField()
+
+
+class AnalyticsEventRequestSerializer(serializers.Serializer):
+    user_id = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    event_type = serializers.CharField(max_length=128)
+    metadata = serializers.JSONField(required=False, default=dict)
+
+
+class AnalyticsEventResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_id = serializers.CharField(allow_blank=True)
+    event_type = serializers.CharField()
+    metadata = serializers.JSONField()
+    timestamp = serializers.DateTimeField()

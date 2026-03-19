@@ -1,24 +1,33 @@
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from core.cache_utils import CATALOG_CACHE_NAMESPACE, build_versioned_cache_key
 from core.models import (
+    AnalyticsEvent,
     DeviceRegistration,
     Disease,
     DiseaseSymptom,
     EvidenceLevel,
     Ingredient,
+    PrivacyPolicy,
     Remedy,
     RemedyIngredient,
+    Source,
     Symptom,
+    TermsOfService,
+    UserConsent,
 )
 
 
 class BaseApiDataMixin:
     @classmethod
     def setUpTestData(cls) -> None:
+        cache.clear()
         cls.evidence_a = EvidenceLevel.objects.create(
             code="A",
             description="Высокий уровень доказательности",
@@ -30,6 +39,22 @@ class BaseApiDataMixin:
             description="Ограниченные данные",
             color="#FBC02D",
             rank=5,
+        )
+        cls.source_arab = Source.objects.create(
+            title="Arab source",
+            author="Author A",
+            year=1200,
+            region="arab",
+            source_type="book",
+            reference="Reference A",
+        )
+        cls.source_chinese = Source.objects.create(
+            title="Chinese source",
+            author="Author C",
+            year=1600,
+            region="chinese",
+            source_type="treatise",
+            reference="Reference C",
         )
 
         cls.disease_flu = Disease.objects.create(
@@ -75,6 +100,8 @@ class BaseApiDataMixin:
             recipe="Рецепт настоя",
             risks="Риски настоя",
             source="https://example.org/remedy-flu",
+            region="other",
+            cultural_context="Базовый контекст",
             evidence_level=cls.evidence_a,
         )
         cls.remedy_migraine_high = Remedy.objects.create(
@@ -84,6 +111,9 @@ class BaseApiDataMixin:
             recipe="Рецепт мяты",
             risks="Риски мяты",
             source="https://example.org/remedy-migraine-a",
+            source_record=cls.source_arab,
+            region="arab",
+            cultural_context="Культурный контекст арабской традиции",
             evidence_level=cls.evidence_a,
         )
         cls.remedy_migraine_low = Remedy.objects.create(
@@ -93,6 +123,9 @@ class BaseApiDataMixin:
             recipe="Рецепт компресса",
             risks="Риски компресса",
             source="https://example.org/remedy-migraine-c",
+            source_record=cls.source_chinese,
+            region="chinese",
+            cultural_context="Культурный контекст китайской традиции",
             evidence_level=cls.evidence_c,
         )
 
@@ -100,11 +133,13 @@ class BaseApiDataMixin:
             name="Мята",
             description="Описание мяты",
             contraindications="Индивидуальная непереносимость",
+            alternative_names={"ar": ["nana"], "zh": ["bo he"]},
         )
         cls.ingredient_water = Ingredient.objects.create(
             name="Вода",
             description="Описание воды",
             contraindications="",
+            alternative_names={"ar": ["maa"]},
         )
         RemedyIngredient.objects.create(
             remedy=cls.remedy_migraine_high,
@@ -145,6 +180,18 @@ class SearchApiTests(BaseApiDataMixin, APITestCase):
         self.assertEqual(len(response.data["diseases"]), 1)
         self.assertEqual(response.data["diseases"][0]["name"], "Мигрень")
 
+    def test_search_filters_by_region(self) -> None:
+        response = self.client.post(
+            f"{reverse('search')}?region=arab",
+            data={"symptoms": ["Головная боль", "Тошнота"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        diseases = response.data["diseases"]
+        self.assertEqual(len(diseases), 1)
+        self.assertEqual(diseases[0]["name"], "Мигрень")
+
 
 class SymptomListApiTests(BaseApiDataMixin, APITestCase):
     def test_symptom_list_returns_all_symptoms_sorted_without_query(self) -> None:
@@ -163,6 +210,17 @@ class SymptomListApiTests(BaseApiDataMixin, APITestCase):
         self.assertIn("Сильная головная боль", names)
         self.assertNotIn("Боль в горле", names)
 
+    def test_symptom_list_populates_cache(self) -> None:
+        response = self.client.get(reverse("symptom-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        cache_key = build_versioned_cache_key(
+            CATALOG_CACHE_NAMESPACE,
+            "symptom-list",
+            {"query": ""},
+        )
+        self.assertIsNotNone(cache.get(cache_key))
+
 
 class DiseaseAndRemedyApiTests(BaseApiDataMixin, APITestCase):
     def test_disease_detail_filters_by_evidence_level(self) -> None:
@@ -176,19 +234,25 @@ class DiseaseAndRemedyApiTests(BaseApiDataMixin, APITestCase):
         self.assertEqual(len(remedies), 1)
         self.assertEqual(remedies[0]["name"], "Компресс при мигрени")
         self.assertEqual(remedies[0]["evidence_level"]["code"], "C")
+        self.assertEqual(remedies[0]["region"], "chinese")
 
-    def test_remedy_list_filters_by_evidence_and_disease(self) -> None:
+    def test_remedy_list_filters_by_evidence_disease_and_region(self) -> None:
         response = self.client.get(
             reverse("remedy-list"),
-            {"evidence_level": "A", "disease_id": self.disease_migraine.id},
+            {
+                "evidence_level": "A",
+                "disease_id": self.disease_migraine.id,
+                "region": "arab",
+            },
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         remedies = response.data["remedies"]
         self.assertEqual(len(remedies), 1)
         self.assertEqual(remedies[0]["name"], "Настой мяты при мигрени")
+        self.assertEqual(remedies[0]["region"], "arab")
 
-    def test_remedy_detail_contains_ingredients_and_counters(self) -> None:
+    def test_remedy_detail_contains_region_source_and_ingredient_aliases(self) -> None:
         response = self.client.get(
             reverse("remedy-detail", kwargs={"remedy_id": self.remedy_migraine_high.id})
         )
@@ -197,6 +261,12 @@ class DiseaseAndRemedyApiTests(BaseApiDataMixin, APITestCase):
         self.assertEqual(response.data["likes_count"], 0)
         self.assertEqual(response.data["dislikes_count"], 0)
         self.assertEqual(len(response.data["ingredients"]), 2)
+        self.assertEqual(response.data["region"], "arab")
+        self.assertEqual(
+            response.data["source_record"]["title"],
+            self.source_arab.title,
+        )
+        self.assertIn("ar", response.data["ingredients"][0]["alternative_names"])
 
     def test_remedy_rate_recalculates_counters(self) -> None:
         url = reverse("remedy-rate", kwargs={"remedy_id": self.remedy_migraine_high.id})
@@ -358,6 +428,95 @@ class SyncApiTests(BaseApiDataMixin, APITestCase):
         self.assertIn("evidence_levels", response.data)
         self.assertIn("Cache-Control", response.headers)
         self.assertIn("max-age", response.headers["Cache-Control"])
+
+
+class PopularDiseaseApiTests(BaseApiDataMixin, APITestCase):
+    def test_popular_diseases_returns_ranked_items(self) -> None:
+        rate_url = reverse(
+            "remedy-rate", kwargs={"remedy_id": self.remedy_migraine_high.id}
+        )
+        self.client.post(
+            rate_url,
+            data={"user_id": "u-1", "is_like": True},
+            format="json",
+        )
+        self.client.post(
+            reverse("remedy-rate", kwargs={"remedy_id": self.remedy_migraine_low.id}),
+            data={"user_id": "u-2", "is_like": False},
+            format="json",
+        )
+
+        response = self.client.get(reverse("popular-disease-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data["diseases"]), 1)
+        self.assertEqual(response.data["diseases"][0]["name"], "Мигрень")
+
+
+class LegalApiTests(APITestCase):
+    USER_ID = "legal-user"
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cache.clear()
+        now = timezone.now()
+        cls.terms = TermsOfService.objects.create(
+            version="1.0",
+            content="Terms v1",
+            effective_from=now,
+        )
+        cls.privacy = PrivacyPolicy.objects.create(
+            version="1.0",
+            content="Privacy v1",
+            effective_from=now,
+        )
+
+    def test_terms_endpoint_returns_current_document(self) -> None:
+        response = self.client.get(reverse("legal-terms"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["document_type"], "terms_of_service")
+        self.assertEqual(response.data["version"], self.terms.version)
+
+    def test_privacy_endpoint_returns_current_document(self) -> None:
+        response = self.client.get(reverse("legal-privacy"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["document_type"], "privacy_policy")
+        self.assertEqual(response.data["version"], self.privacy.version)
+
+    def test_consent_endpoint_records_agreement(self) -> None:
+        response = self.client.post(
+            reverse("legal-consent"),
+            data={
+                "document_type": "terms_of_service",
+                "version": "1.0",
+            },
+            format="json",
+            HTTP_X_USER_ID=self.USER_ID,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(UserConsent.objects.count(), 1)
+        self.assertEqual(response.data["document_type"], "terms_of_service")
+
+
+class AnalyticsApiTests(APITestCase):
+    def test_analytics_endpoint_stores_event(self) -> None:
+        response = self.client.post(
+            reverse("analytics"),
+            data={
+                "event_type": "screen_view",
+                "metadata": {"screen": "remedy_detail"},
+            },
+            format="json",
+            HTTP_X_USER_ID="analytics-user",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(AnalyticsEvent.objects.count(), 1)
+        self.assertEqual(response.data["event_type"], "screen_view")
+        self.assertEqual(response.data["user_id"], "analytics-user")
 
 
 class PushApiTests(BaseApiDataMixin, APITestCase):

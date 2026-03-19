@@ -5,7 +5,7 @@ import '../theme/app_design_tokens.dart';
 import '../widgets/widgets.dart';
 import '../models/models.dart';
 
-/// Главный экран с поиском и популярными болезнями
+/// Главный экран v2 (Warmth & Nature)
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -20,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingPopular = false;
   String? _error;
 
-  // Популярные симптомы (захардкожены для примера)
+  // Популярные симптомы
   final List<String> _popularSymptoms = [
     'Головная боль',
     'Температура',
@@ -44,19 +44,16 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoadingPopular = true);
 
     try {
-      final response = await http
-          .get(Uri.parse('http://10.0.2.2:8000/api/diseases/popular/'))
-          .timeout(const Duration(seconds: 30));
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/api/diseases/popular/'),
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);
-        final List<dynamic> diseasesJson =
-            jsonData['diseases'] as List<dynamic>;
-
+        final List<dynamic> diseasesJson = jsonData['diseases'] as List<dynamic>;
+        
         setState(() {
-          _popularDiseases = diseasesJson
-              .map((json) => Disease.fromJson(json))
-              .toList();
+          _popularDiseases = diseasesJson.map((json) => Disease.fromJson(json)).toList();
           _isLoadingPopular = false;
         });
       } else {
@@ -77,7 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
 
-    // Переход на экран результатов
     Navigator.pushNamed(
       context,
       '/search-results',
@@ -94,18 +90,20 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Заголовок
-              const Text(
-                'Народная Медицина',
-                style: TextStyle(
+              const SizedBox(height: AppDesignTokens.spacingLG),
+              
+              // Приветствие
+              Text(
+                'Как вы себя чувствуете сегодня?',
+                style: const TextStyle(
                   fontSize: AppDesignTokens.fontSizeH1,
                   fontWeight: AppDesignTokens.fontWeightBold,
                   color: AppDesignTokens.textPrimary,
                 ),
               ),
-              const SizedBox(height: AppDesignTokens.spacingXS),
+              const SizedBox(height: AppDesignTokens.spacingSM),
               const Text(
-                'Найдите народные методы лечения по симптомам',
+                'Найдите народные методы лечения с научной оценкой эффективности',
                 style: TextStyle(
                   fontSize: AppDesignTokens.fontSizeBody,
                   color: AppDesignTokens.textSecondary,
@@ -113,14 +111,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: AppDesignTokens.spacingLG),
 
-              // SearchBar
+              // Поиск
               AppSearchBar(
                 controller: _searchController,
                 hintText: 'Введите симптомы...',
                 onSearch: _handleSearch,
-                onChanged: (value) {
-                  // Можно добавить автодополнение
-                },
               ),
               const SizedBox(height: AppDesignTokens.spacingLG),
 
@@ -166,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: AppDesignTokens.spacingSM),
-
+              
               if (_isLoadingPopular)
                 const Center(
                   child: Padding(
@@ -180,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.all(AppDesignTokens.spacingLG),
                     child: Column(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.error_outline,
                           color: AppDesignTokens.danger,
                           size: 48,
@@ -219,8 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _popularDiseases.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: AppDesignTokens.spacingMD),
+                    separatorBuilder: (_, __) => const SizedBox(width: AppDesignTokens.spacingMD),
                     itemBuilder: (context, index) {
                       final disease = _popularDiseases[index];
                       return SizedBox(
@@ -241,12 +235,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               const SizedBox(height: AppDesignTokens.spacingLG),
 
-              // Warning Block
-              const AppWarningBlock(
-                title: 'Важное предупреждение',
-                message:
-                    'Данное приложение не ставит диагноз и не заменяет консультацию врача. Все материалы носят ознакомительный характер.',
+              // Мягкое предупреждение
+              const AppSoftWarning(
+                message: 'Перед применением рекомендуется проконсультироваться с врачом',
               ),
+              const SizedBox(height: AppDesignTokens.spacingXL),
             ],
           ),
         ),

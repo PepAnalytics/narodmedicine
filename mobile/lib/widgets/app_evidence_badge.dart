@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import '../theme/app_design_tokens.dart';
 
-/// Бейдж уровня доказательности
-/// Padding: 4px 10px, radius: 12px, font-size: 12px, weight: 600
+/// Бейдж уровня доказательности v2
+/// Обновлённые цвета и текстовые описания
 class AppEvidenceBadge extends StatelessWidget {
   final String code; // A, B, C, D, E
-  final String? label;
   final bool showIcon;
 
   const AppEvidenceBadge({
     super.key,
     required this.code,
-    this.label,
     this.showIcon = true,
   });
 
@@ -21,6 +19,7 @@ class AppEvidenceBadge extends StatelessWidget {
         AppDesignTokens.evidenceBg['E']!;
     final textColor = AppDesignTokens.evidenceText[code.toUpperCase()] ??
         AppDesignTokens.evidenceText['E']!;
+    final label = AppDesignTokens.evidenceLabels[code.toUpperCase()] ?? code;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -30,6 +29,10 @@ class AppEvidenceBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(AppDesignTokens.radiusSM),
+        border: Border.all(
+          color: textColor.withValues(alpha: 0.3),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -43,7 +46,7 @@ class AppEvidenceBadge extends StatelessWidget {
             const SizedBox(width: 4),
           ],
           Text(
-            label ?? _getLabelForCode(code),
+            label,
             style: TextStyle(
               fontSize: AppDesignTokens.fontSizeCaption,
               fontWeight: AppDesignTokens.fontWeightBold,
@@ -55,33 +58,16 @@ class AppEvidenceBadge extends StatelessWidget {
     );
   }
 
-  String _getLabelForCode(String code) {
-    switch (code.toUpperCase()) {
-      case 'A':
-        return 'Высокий';
-      case 'B':
-        return 'Средний';
-      case 'C':
-        return 'Низкий';
-      case 'D':
-        return 'Очень низкий';
-      case 'E':
-        return 'Нет данных';
-      default:
-        return code;
-    }
-  }
-
   IconData _getIconForCode(String code) {
     switch (code.toUpperCase()) {
       case 'A':
-        return Icons.star;
+        return Icons.auto_stories;
       case 'B':
-        return Icons.star_half;
+        return Icons.menu_book;
       case 'C':
-        return Icons.star_outline;
+        return Icons.psychology_outlined;
       case 'D':
-        return Icons.info_outline;
+        return Icons.history_edu;
       case 'E':
         return Icons.help_outline;
       default:

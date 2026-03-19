@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_design_tokens.dart';
 
-/// Тема приложения на основе дизайн-токенов
+/// Тема приложения v2 (Warmth & Nature)
 class AppTheme {
   AppTheme._();
 
@@ -18,7 +18,6 @@ class AppTheme {
         primary: AppDesignTokens.primaryGreen,
         secondary: AppDesignTokens.secondaryGreen,
         surface: AppDesignTokens.bgMain,
-        background: AppDesignTokens.bgMain, // Deprecated but kept for compatibility
         error: AppDesignTokens.danger,
       ),
 
@@ -47,7 +46,10 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDesignTokens.radiusLG),
-          side: BorderSide(color: AppDesignTokens.borderColor, width: 1),
+          side: BorderSide(
+            color: AppDesignTokens.borderColor,
+            width: 1,
+          ),
         ),
       ),
 
@@ -61,19 +63,31 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDesignTokens.radiusMD),
-          borderSide: BorderSide(color: AppDesignTokens.borderColor, width: 1),
+          borderSide: BorderSide(
+            color: AppDesignTokens.borderColor,
+            width: 1,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDesignTokens.radiusMD),
-          borderSide: BorderSide(color: AppDesignTokens.borderColor, width: 1),
+          borderSide: BorderSide(
+            color: AppDesignTokens.borderColor,
+            width: 1,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDesignTokens.radiusMD),
-          borderSide: BorderSide(color: AppDesignTokens.primaryGreen, width: 2),
+          borderSide: BorderSide(
+            color: AppDesignTokens.primaryGreen,
+            width: 2,
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDesignTokens.radiusMD),
-          borderSide: BorderSide(color: AppDesignTokens.danger, width: 1),
+          borderSide: BorderSide(
+            color: AppDesignTokens.danger,
+            width: 1,
+          ),
         ),
         hintStyle: const TextStyle(
           color: AppDesignTokens.textMuted,
@@ -86,10 +100,7 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppDesignTokens.primaryGreen,
           foregroundColor: Colors.white,
-          minimumSize: const Size(
-            double.infinity,
-            AppDesignTokens.buttonHeight,
-          ),
+          minimumSize: const Size(double.infinity, AppDesignTokens.buttonHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppDesignTokens.radiusMD),
           ),
@@ -105,10 +116,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppDesignTokens.primaryGreen,
-          minimumSize: const Size(
-            AppDesignTokens.minTapSize,
-            AppDesignTokens.minTapSize,
-          ),
+          minimumSize: const Size(AppDesignTokens.minTapSize, AppDesignTokens.minTapSize),
           textStyle: const TextStyle(
             fontSize: AppDesignTokens.fontSizeBody,
             fontWeight: AppDesignTokens.fontWeightMedium,
@@ -120,14 +128,14 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppDesignTokens.primaryGreen,
-          minimumSize: const Size(
-            double.infinity,
-            AppDesignTokens.buttonHeight,
-          ),
+          minimumSize: const Size(double.infinity, AppDesignTokens.buttonHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppDesignTokens.radiusMD),
           ),
-          side: BorderSide(color: AppDesignTokens.primaryGreen, width: 1.5),
+          side: BorderSide(
+            color: AppDesignTokens.primaryGreen,
+            width: 1.5,
+          ),
           textStyle: const TextStyle(
             fontSize: AppDesignTokens.fontSizeBody,
             fontWeight: AppDesignTokens.fontWeightBold,
@@ -165,6 +173,21 @@ class AppTheme {
         color: AppDesignTokens.textPrimary,
         size: AppDesignTokens.iconSizeMedium,
       ),
+
+      // Floating Action Button
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppDesignTokens.primaryGreen,
+        foregroundColor: Colors.white,
+        elevation: 4,
+      ),
+
+      // Bottom Navigation
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: AppDesignTokens.bgCard,
+        selectedItemColor: AppDesignTokens.primaryGreen,
+        unselectedItemColor: AppDesignTokens.textMuted,
+        type: BottomNavigationBarType.fixed,
+      ),
     );
   }
 
@@ -178,7 +201,6 @@ class AppTheme {
         brightness: Brightness.dark,
         primary: AppDesignTokens.secondaryGreen,
         surface: const Color(0xFF1A1F1D),
-        background: const Color(0xFF121514), // Deprecated but kept for compatibility
       ),
       scaffoldBackgroundColor: const Color(0xFF121514),
       textTheme: _buildTextTheme().apply(
@@ -196,7 +218,10 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDesignTokens.radiusLG),
-          side: const BorderSide(color: Color(0xFF2A302D), width: 1),
+          side: const BorderSide(
+            color: Color(0xFF2A302D),
+            width: 1,
+          ),
         ),
       ),
     );

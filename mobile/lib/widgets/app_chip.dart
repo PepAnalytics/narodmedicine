@@ -22,9 +22,7 @@ class AppChip extends StatelessWidget {
     final backgroundColor = isSelected
         ? AppDesignTokens.primaryGreen
         : AppDesignTokens.bgMuted;
-    final textColor = isSelected
-        ? Colors.white
-        : AppDesignTokens.textPrimary;
+    final textColor = isSelected ? Colors.white : AppDesignTokens.textPrimary;
 
     return InkWell(
       onTap: onTap,
@@ -42,11 +40,7 @@ class AppChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(
-                icon,
-                size: AppDesignTokens.iconSizeSmall,
-                color: textColor,
-              ),
+              Icon(icon, size: AppDesignTokens.iconSizeSmall, color: textColor),
               const SizedBox(width: 4),
             ],
             Text(
@@ -86,9 +80,7 @@ class AppRegionChip extends StatelessWidget {
     final backgroundColor = isSelected
         ? AppDesignTokens.primaryGreen
         : AppDesignTokens.bgMuted;
-    final textColor = isSelected
-        ? Colors.white
-        : AppDesignTokens.textPrimary;
+    final textColor = isSelected ? Colors.white : AppDesignTokens.textPrimary;
 
     return InkWell(
       onTap: onTap,
@@ -106,10 +98,7 @@ class AppRegionChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (emoji != null) ...[
-              Text(
-                emoji!,
-                style: const TextStyle(fontSize: 14),
-              ),
+              Text(emoji!, style: const TextStyle(fontSize: 14)),
               const SizedBox(width: 4),
             ],
             Text(

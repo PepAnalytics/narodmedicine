@@ -1,28 +1,52 @@
 import 'package:flutter/material.dart';
 
-/// Дизайн-токены приложения
-/// Все цвета, типографика, отступы и радиусы согласно UI-киту
+/// Дизайн-токены приложения v2 (Warmth & Nature)
+/// Философия: Healing + Warmth + Nature + Trust
 class AppDesignTokens {
   AppDesignTokens._();
 
   // ============================================================
-  // ЦВЕТА
+  // ЦВЕТА - Новая палитра
   // ============================================================
 
   // Primary цвета
   static const Color primaryGreen = Color(0xFF2E7D32);
-  static const Color secondaryGreen = Color(0xFF66BB6A);
-  static const Color lightGreen = Color(0xFFE8F5E9);
+  static const Color secondaryGreen = Color(0xFF668864);
+  static const Color lightGreen = Color(0xFFF3E559);
+  static const Color warmCream = Color(0xFFFAF772);
+
+  // Градиенты
+  static const LinearGradient gradientFresh = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFE8F5E9),
+      Color(0xFFF1F8E9),
+    ],
+  );
+
+  static const LinearGradient gradientCard = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFFFFFFF),
+      Color(0xFFF9FBF9),
+    ],
+  );
 
   // Background цвета
   static const Color bgMain = Color(0xFFF5F7F6);
   static const Color bgCard = Color(0xFFFFFFFF);
   static const Color bgMuted = Color(0xFFF1F3F2);
+  static const Color bgWarm = Color(0xFFFFF8E7); // Для предупреждений
 
   // Text цвета
   static const Color textPrimary = Color(0xFF1B1F1D);
   static const Color textSecondary = Color(0xFF5F6B66);
   static const Color textMuted = Color(0xFF8A9590);
+
+  // Accent (тепло)
+  static const Color accentWarm = Color(0xFFFFCC80);
 
   // Border цвета
   static const Color borderColor = Color(0xFFE0E5E3);
@@ -32,13 +56,13 @@ class AppDesignTokens {
   static const Color warning = Color(0xFFF9A825);
   static const Color danger = Color(0xFFC62828);
 
-  // Evidence уровни - фон
+  // Evidence уровни - фон (обновлённые)
   static const Map<String, Color> evidenceBg = {
-    'A': Color(0xFFE8F5E9),
-    'B': Color(0xFFF1F8E9),
-    'C': Color(0xFFFFF8E1),
-    'D': Color(0xFFFFF3E0),
-    'E': Color(0xFFFFEBEE),
+    'A': Color(0xFFC8E6C9), // Зелёный мягкий
+    'B': Color(0xFFDCEDC8), // Оливковый
+    'C': Color(0xFFFFF8E1), // Тёплый жёлтый
+    'D': Color(0xFFFFE0B2), // Оранжевый
+    'E': Color(0xFFFFCDD2), // Красный
   };
 
   // Evidence уровни - текст
@@ -48,6 +72,15 @@ class AppDesignTokens {
     'C': Color(0xFFF9A825),
     'D': Color(0xFFEF6C00),
     'E': Color(0xFFC62828),
+  };
+
+  // Evidence текстовые описания
+  static const Map<String, String> evidenceLabels = {
+    'A': 'Хорошо изучено',
+    'B': 'Частично подтверждено',
+    'C': 'Требует исследований',
+    'D': 'Традиционное использование',
+    'E': 'Нет подтверждений',
   };
 
   // ============================================================
@@ -92,17 +125,17 @@ class AppDesignTokens {
 
   static List<BoxShadow> shadowCard = [
     BoxShadow(
-      color: Color.fromRGBO(0, 0, 0, 0.06),
+      color: const Color.fromRGBO(0, 0, 0, 0.06),
       blurRadius: 20,
-      offset: Offset(0, 6),
+      offset: const Offset(0, 6),
     ),
   ];
 
   static List<BoxShadow> shadowSoft = [
     BoxShadow(
-      color: Color.fromRGBO(0, 0, 0, 0.04),
+      color: const Color.fromRGBO(0, 0, 0, 0.04),
       blurRadius: 10,
-      offset: Offset(0, 2),
+      offset: const Offset(0, 2),
     ),
   ];
 
@@ -122,4 +155,12 @@ class AppDesignTokens {
 
   // Минимальная область нажатия (accessibility)
   static const double minTapSize = 44.0;
+
+  // ============================================================
+  // АНИМАЦИИ
+  // ============================================================
+
+  static const Duration animationDuration = Duration(milliseconds: 300);
+  static const Duration animationDurationSlow = Duration(milliseconds: 500);
+  static const Curve animationCurve = Curves.easeInOut;
 }
